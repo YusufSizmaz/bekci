@@ -2,21 +2,33 @@
 
 ## Reporting a vulnerability in bekci
 
-Please report privately through [GitHub Security Advisories](https://github.com/YusufSizmaz/bekci/security/advisories/new). Do not open a public issue.
+Please report privately through [GitHub private vulnerability reporting](https://github.com/YusufSizmaz/bekci/security/advisories/new). Do not open a public issue.
 
-You can expect an acknowledgement within 72 hours. Fixes are released as patch versions and credited in the advisory unless you prefer otherwise.
+You will get an acknowledgement within 72 hours and a fix or a plan within 14 days. Fixes ship as patch releases and are credited in the advisory unless you prefer otherwise.
 
-In scope, for example:
+### In scope
 
-- Code execution or file writes triggered by scanning a malicious directory or repository
+- Code execution, file writes or network access triggered by scanning a malicious directory, skill, plugin or `github:` repository
+- A scanned file that hides findings from bekci: suppressing, downgrading or preventing analysis without being reported (BK207/BK208 exist so that "could not scan" is never silent)
 - bekci printing a secret in clear text in any output format
-- Path traversal or symlink tricks during `github:` remote scans
-- Network access other than the explicit `git clone` of a remote target
+- Terminal, Markdown or SARIF injection: scanned content that changes how a report is displayed or interpreted
+- Denial of service: input that makes a scan hang, crash or use unbounded memory
+- Path traversal or symlink escapes during remote scans
 
-## Evasions
+### Out of scope
 
-A technique that hides malicious content from a rule is a detection gap, not a vulnerability in bekci. Please open a [new rule issue](https://github.com/YusufSizmaz/bekci/issues/new?template=new_rule.yml) for it. If the technique is not public yet and you would rather not disclose it in the open, use the private advisory channel above.
+- **Evasions** of an individual detection (a new spelling of `curl | sh`, a phrasing the injection rules do not know). These are detection gaps, not vulnerabilities: open a [new rule issue](https://github.com/YusufSizmaz/bekci/issues/new?template=new_rule.yml). If the technique is unpublished and you would rather not disclose it in the open, use the private channel above.
+- False positives: use the [false positive template](https://github.com/YusufSizmaz/bekci/issues/new?template=false_positive.yml).
+- Vulnerabilities in the tools bekci scans for (report those to their maintainers).
+
+## Hardening
+
+The threat model and the defences that exist today are documented in [docs/architecture.md](docs/architecture.md#threat-model). Each defence has an attack test in [test/hardening.test.ts](test/hardening.test.ts).
 
 ## Supported versions
 
-Only the latest minor release receives fixes.
+Only the latest minor release receives fixes. Releases are published from CI with [npm provenance](https://docs.npmjs.com/generating-provenance-statements), so you can verify that a package was built from this repository:
+
+```bash
+npm audit signatures
+```

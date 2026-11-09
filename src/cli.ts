@@ -10,32 +10,35 @@ import { renderSarif } from './report/sarif.js';
 import { findRule, RULES } from './rules/index.js';
 import { scan, type ScanOutput, VERSION } from './scan.js';
 import { isSeverity, type Severity, severityRank } from './types.js';
-import { c, colorSupported, severityBadge, setColor } from './util/ansi.js';
+import { c, colorEnabled, colorSupported, severityBadge, setColor } from './util/ansi.js';
 
 const HELP = `
-${'bekci'} — security scanner for AI agent setups
+${'bekci'} \u2014 security scanner for AI agent setups
 
 Usage
   bekci [path|github:owner/repo ...] [options]
-  bekci rules                     List all rules
+  bekci rules [-f json]           List all rules
   bekci explain <rule>            Explain a rule and how to fix it
 
 Targets
   (none)                          Current directory + your user-level agent config
   ./path                          A project, skill or plugin directory
   github:owner/repo[/dir][#ref]   Fetch a repo and scan it before you install anything
-  https://github.com/owner/repo   Same, from a URL (tree/<ref>/<dir> links work too)
+  gitlab:owner/repo               Same, from GitLab
+  https://github.com/owner/repo   Same, from a URL (tree/<ref>/<dir> links and *.git URLs work too)
 
 Options
   -f, --format <fmt>       pretty (default) | json | sarif | markdown
-  -o, --output <file>      Write the report to a file
+  -o, --output <file>      Also write a report file; format from the extension (.json, .sarif,
+                           .md), otherwise --format. Repeatable. The terminal keeps the summary.
+  -q, --quiet              With --output: print nothing to the terminal
       --no-user            Skip user-level config in your home directory
       --user-only          Only scan user-level config
       --min-severity <s>   Hide findings below: info | low (default) | medium | high | critical
       --fail-on <s>        Exit 1 if a finding is at or above this severity (default: high; "none" to never fail)
       --ignore <ids>       Skip rules, comma separated (e.g. BK201,BK105)
       --only <ids>         Run only these rules
-      --ignore-path <glob> Drop findings in matching files (repeatable)
+      --ignore-path <glob> Skip matching files entirely (repeatable)
       --no-inline-ignore   Do not honour bekci-ignore comments
       --no-config          Do not read .bekci.json
   -v, --verbose            Show matched evidence
@@ -43,13 +46,15 @@ Options
   -h, --help               Show this help
       --version            Show version
 
-Exit codes: 0 clean · 1 findings at or above --fail-on · 2 usage error, runtime error or incomplete scan
-Docs: https://github.com/YusufSizmaz/bekci
+Config: .bekci.json or bekci.config.json in the scanned directory
+Exit codes: 0 clean \u00B7 1 findings at or above --fail-on \u00B7 2 usage error, runtime error or incomplete scan
+Set BEKCI_DEBUG=1 to print stack traces. Docs: https://github.com/YusufSizmaz/bekci
 `;
 
 interface Flags {
   format: string;
-  output?: string;
+  output: string[];
+  quiet: boolean;
   'no-user': boolean;
   'user-only': boolean;
   'min-severity'?: string;
@@ -74,7 +79,8 @@ async function main(argv: string[]): Promise<number> {
     strict: true,
     options: {
       format: { type: 'string', short: 'f', default: 'pretty' },
-      output: { type: 'string', short: 'o' },
+      output: { type: 'string', short: 'o', multiple: true, default: [] },
+      quiet: { type: 'boolean', short: 'q', default: false },
       'no-user': { type: 'boolean', default: false },
       'user-only': { type: 'boolean', default: false },
       'min-severity': { type: 'string' },
@@ -91,8 +97,8 @@ async function main(argv: string[]): Promise<number> {
     },
   });
   const flags = values as unknown as Flags;
-  const toFile = Boolean(flags.output);
-  setColor(!flags['no-color'] && !toFile && colorSupported());
+  const outputs = flags.output;
+  setColor(!flags['no-color'] && colorSupported());
 
   if (flags.help) {
     process.stdout.write(HELP);
@@ -107,22 +113,38 @@ async function main(argv: string[]): Promise<number> {
   if (command === 'rules' && rest.length === 0) return listRules(flags.format);
   if (command === 'explain') return explain(rest[0]);
 
-  if (!['pretty', 'json', 'sarif', 'markdown', 'md'].includes(flags.format)) throw new UsageError(`Unknown format "${flags.format}"`);
+  if (!FORMATS.includes(flags.format)) throw new UsageError(`Unknown format "${flags.format}"`);
+  const pretty = flags.format === 'pretty';
+  // Progress and notices go to stderr so stdout stays machine-readable.
+  const say = (msg: string) => {
+    if (!flags.quiet) process.stderr.write(c.dim(`  ${msg}\n`));
+  };
 
   // Resolve targets: local paths and remote repositories.
-  const remotes = positionals.map((p) => ({ arg: p, remote: parseRemote(p) }));
+  const targets = positionals.map((p) => ({ arg: p, remote: parseRemote(p) }));
+  const hasRemote = targets.some((t) => t.remote);
+  for (const t of targets) {
+    if (t.remote) continue;
+    // A typo in a path must not produce a green "no issues" result.
+    if (!(await fs.stat(t.arg).catch(() => undefined))) {
+      throw new UsageError(
+        `Path not found: ${t.arg}${/^[\w.-]+\/[\w.-]+$/.test(t.arg) ? ` (did you mean github:${t.arg}?)` : ''}`,
+      );
+    }
+  }
+
   const cleanups: Array<() => Promise<void>> = [];
   const paths: string[] = [];
-  const hasRemote = remotes.some((r) => r.remote);
   try {
-    for (const { arg, remote } of remotes) {
+    for (const { arg, remote } of targets) {
       if (!remote) {
         paths.push(arg);
         continue;
       }
-      if (flags.format === 'pretty') process.stderr.write(c.dim(`  Fetching ${remote.label}…\n`));
+      say(`Fetching ${remote.label}\u2026`);
       const fetched = await fetchRemote(remote);
       cleanups.push(fetched.cleanup);
+      onInterrupt(fetched.cleanup);
       paths.push(fetched.dir);
     }
 
@@ -132,20 +154,23 @@ async function main(argv: string[]): Promise<number> {
       const st = await fs.stat(dir).catch(() => undefined);
       const loaded = await loadConfig(st?.isFile() ? path.dirname(dir) : dir);
       config = loaded.config;
-      if (loaded.path && flags.format === 'pretty' && !flags.output) {
+      if (loaded.path) {
         // The config lives in the scanned directory, so whoever wrote it can hide findings. Say so.
         const parts = [
           config.ignore?.length ? `ignores ${config.ignore.join(', ')}` : '',
           config.ignorePaths?.length ? `${config.ignorePaths.length} ignored path pattern(s)` : '',
+          config.minSeverity ? `min-severity ${config.minSeverity}` : '',
           config.failOn ? `fail-on ${config.failOn}` : '',
         ].filter(Boolean);
-        process.stderr.write(c.dim(`  Using ${path.relative(process.cwd(), loaded.path) || loaded.path}${parts.length ? `: ${parts.join(', ')}` : ''} (--no-config to skip)\n`));
+        say(
+          `Using ${path.relative(process.cwd(), loaded.path) || loaded.path}${parts.length ? `: ${parts.join(', ')}` : ''} (--no-config to skip)`,
+        );
       }
     }
 
     const minSeverity = pickSeverity(flags['min-severity'], config.minSeverity, 'low', '--min-severity');
-    const failOnRaw = flags['fail-on'] ?? config.failOn ?? 'high';
-    if (failOnRaw !== 'none' && !isSeverity(failOnRaw)) throw new UsageError(`Invalid --fail-on "${failOnRaw}"`);
+    const failOn = flags['fail-on'] ?? config.failOn ?? 'high';
+    if (failOn !== 'none' && !isSeverity(failOn)) throw new UsageError(`Invalid --fail-on "${failOn}"`);
 
     const userOnly = flags['user-only'];
     const result = await scan({
@@ -158,31 +183,73 @@ async function main(argv: string[]): Promise<number> {
       ignorePaths: [...flags['ignore-path'], ...(config.ignorePaths ?? [])],
       minSeverity,
     });
-    if (hasRemote) result.roots = remotes.map((r) => r.remote?.label ?? r.arg);
+    if (hasRemote) result.roots = targets.map((t) => t.remote?.label ?? t.arg);
 
-    const rendered = render(result, flags.format, flags.verbose, paths[0]);
-    if (flags.output) {
-      await fs.writeFile(flags.output, rendered);
-      process.stderr.write(`bekci: wrote ${flags.format} report to ${flags.output} (${result.findings.length} findings, grade ${result.grade})\n`);
-    } else {
+    // SARIF locations must be relative to the repository root (the working directory in CI),
+    // or to the checkout for remote targets, so code-scanning alerts point at the right files.
+    const sarifRoot = hasRemote ? paths[0]! : process.cwd();
+
+    // Files get machine-readable reports; the terminal keeps the human one.
+    for (const file of outputs) {
+      const format = formatFor(file, flags.format);
+      await fs.writeFile(
+        file,
+        withoutColor(() => render(result, format, flags.verbose, sarifRoot)),
+      );
+      say(`Wrote ${format} report to ${file}`);
+    }
+    if (!flags.quiet || !outputs.length) {
+      const stdoutFormat = outputs.length && !pretty ? 'pretty' : flags.format;
+      const rendered = render(result, stdoutFormat, flags.verbose, sarifRoot);
       process.stdout.write(rendered.endsWith('\n') ? rendered : rendered + '\n');
     }
 
-    if (result.incomplete && failOnRaw !== 'none') return 2;
-    if (failOnRaw === 'none') return 0;
-    const threshold = severityRank(failOnRaw as Severity);
+    if (failOn === 'none') return 0;
+    if (result.incomplete) return 2;
+    const threshold = severityRank(failOn as Severity);
     return result.findings.some((f) => severityRank(f.severity) >= threshold) ? 1 : 0;
   } finally {
     for (const cleanup of cleanups) await cleanup().catch(() => {});
   }
 }
 
-function render(result: ScanOutput, format: string, verbose: boolean, root?: string): string {
+const FORMATS = ['pretty', 'json', 'sarif', 'markdown', 'md'];
+
+/** Removes temporary checkouts if the user presses Ctrl-C mid-scan. */
+function onInterrupt(cleanup: () => Promise<void>): void {
+  const handler = (signal: NodeJS.Signals) => {
+    void cleanup().finally(() => process.exit(signal === 'SIGINT' ? 130 : 143));
+  };
+  process.once('SIGINT', handler);
+  process.once('SIGTERM', handler);
+}
+
+/** Output format for a file: inferred from its extension, otherwise --format. */
+function formatFor(file: string, fallback: string): string {
+  const lower = file.toLowerCase();
+  if (lower.endsWith('.sarif') || lower.endsWith('.sarif.json')) return 'sarif';
+  if (lower.endsWith('.json')) return 'json';
+  if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
+  if (lower.endsWith('.txt') || lower.endsWith('.log')) return 'pretty';
+  return fallback;
+}
+
+function withoutColor<T>(fn: () => T): T {
+  const previous = colorEnabled();
+  setColor(false);
+  try {
+    return fn();
+  } finally {
+    setColor(previous);
+  }
+}
+
+function render(result: ScanOutput, format: string, verbose: boolean, root: string): string {
   switch (format) {
     case 'json':
       return JSON.stringify(result, null, 2);
     case 'sarif':
-      return renderSarif(result, root ?? process.cwd());
+      return renderSarif(result, root);
     case 'markdown':
     case 'md':
       return renderMarkdown(result);
@@ -198,7 +265,10 @@ function pickSeverity(flag: string | undefined, config: Severity | undefined, fa
 }
 
 function split(list: string[]): string[] {
-  return list.flatMap((s) => s.split(',')).map((s) => s.trim()).filter(Boolean);
+  return list
+    .flatMap((s) => s.split(','))
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 function listRules(format: string): number {
@@ -226,7 +296,7 @@ function explain(id: string | undefined): number {
   const out = [
     '',
     `  ${severityBadge(r.severity)} ${c.bold(r.id)}  ${c.bold(r.title)}`,
-    `  ${c.dim(`${r.name} · ${r.category}`)}`,
+    `  ${c.dim(`${r.name} \u00B7 ${r.category}`)}`,
     '',
     wrap(r.description, 78, '  '),
     '',

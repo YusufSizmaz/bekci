@@ -30,12 +30,48 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_CLAUDE_JSON_BYTES = 64 * 1024 * 1024;
 
 const SCRIPT_EXT = new Set([
-  '.sh', '.bash', '.zsh', '.fish', '.py', '.js', '.mjs', '.cjs', '.ts', '.mts', '.rb', '.pl',
-  '.php', '.ps1', '.psm1', '.bat', '.cmd', '.lua', '.go', '.applescript', '.scpt',
+  '.sh',
+  '.bash',
+  '.zsh',
+  '.fish',
+  '.py',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.ts',
+  '.mts',
+  '.rb',
+  '.pl',
+  '.php',
+  '.ps1',
+  '.psm1',
+  '.bat',
+  '.cmd',
+  '.lua',
+  '.go',
+  '.applescript',
+  '.scpt',
 ]);
+const REFERENCE_EXT = new Set(['.md', '.mdx', '.markdown', '.txt', '.rst', '.adoc']);
 const BINARY_EXT = new Set([
-  '.exe', '.dll', '.so', '.dylib', '.bin', '.pyc', '.pyo', '.jar', '.class', '.wasm', '.node',
-  '.o', '.a', '.elf', '.msi', '.deb', '.rpm', '.appimage',
+  '.exe',
+  '.dll',
+  '.so',
+  '.dylib',
+  '.bin',
+  '.pyc',
+  '.pyo',
+  '.jar',
+  '.class',
+  '.wasm',
+  '.node',
+  '.o',
+  '.a',
+  '.elf',
+  '.msi',
+  '.deb',
+  '.rpm',
+  '.appimage',
 ]);
 
 export interface DiscoverOptions {
@@ -134,6 +170,8 @@ export async function discover(opts: DiscoverOptions): Promise<Discovery> {
       let kind: FileKind | undefined;
       if (BINARY_EXT.has(ext)) kind = 'binary';
       else if (SCRIPT_EXT.has(ext) || (ext === '' && (await hasShebang(abs)))) kind = 'script';
+      // Reference docs the skill tells the agent to read are as much a prompt as SKILL.md.
+      else if (REFERENCE_EXT.has(ext)) kind = 'reference';
       if (!kind) continue;
       const file = await load({ abs, scope: info.scope, base: info.base }, kind, info.agent, home, errors);
       if (!file) continue;
@@ -143,14 +181,49 @@ export async function discover(opts: DiscoverOptions): Promise<Discovery> {
     }
   }
 
+  // Files pulled in indirectly: plugin.json path references and CLAUDE.md `@imports`.
+  const confine = opts.followSymlinks ? undefined : opts.paths.map((p) => path.resolve(p));
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]!;
+    for (const ref of await indirectFiles(file, home, confine)) {
+      if (seen.has(ref.abs)) continue;
+      seen.add(ref.abs);
+      const loaded = await load(
+        { abs: ref.abs, scope: file.scope, base: baseFor(file, home, opts.paths) },
+        ref.kind,
+        file.agent,
+        home,
+        errors,
+      );
+      if (!loaded) continue;
+      loaded.vendored = file.vendored;
+      loaded.importDepth = (file.importDepth ?? 0) + 1;
+      files.push(loaded);
+    }
+  }
+
+  for (const file of files) {
+    if (
+      file.skillRoot ||
+      [...pluginRoots].some((r) => file.path.startsWith(r + path.sep)) ||
+      file.path.includes(`${path.sep}node_modules${path.sep}`)
+    ) {
+      file.vendored = true;
+    }
+  }
   files.sort((a, b) => a.displayPath.localeCompare(b.displayPath));
 
   const servers: McpServer[] = [];
   const hooks: HookCommand[] = [];
   for (const file of files) {
     if (file.kind !== 'config' || !file.data) continue;
-    servers.push(...extractServers(file));
-    hooks.push(...extractHooks(file));
+    // A pathological config must not take the whole scan down.
+    try {
+      servers.push(...extractServers(file));
+      hooks.push(...extractHooks(file));
+    } catch (e) {
+      file.parseError = `could not analyse: ${(e as Error).message}`;
+    }
   }
   if (state.truncated) errors.push('File limit reached: some directories were not scanned. Scan a narrower path.');
   return { files, servers, hooks, errors, truncated: state.truncated };
@@ -268,10 +341,17 @@ export function classify(
   if (base === 'claude_desktop_config.json') return { kind: 'config', agent: 'claude-desktop' };
   if (base === 'mcp_config.json' && has('windsurf')) return { kind: 'config', agent: 'windsurf' };
   if (base === 'cline_mcp_settings.json') return { kind: 'config', agent: 'cline' };
+  if (base === 'plugin.json' && parent === '.claude-plugin') return { kind: 'config', agent: 'claude-code' };
 
   // --- Skills, agents, commands -------------------------------------------------------
   if (base === 'SKILL.md') {
-    const agent: Agent = has('.codex') ? 'codex' : has('.claude') || inPlugin ? 'claude-code' : has('.cursor') ? 'cursor' : 'generic';
+    const agent: Agent = has('.codex')
+      ? 'codex'
+      : has('.claude') || inPlugin
+        ? 'claude-code'
+        : has('.cursor')
+          ? 'cursor'
+          : 'generic';
     return { kind: 'skill', agent };
   }
   if (/\.md$/i.test(base) && parent === 'agents' && (grand === '.claude' || inPlugin)) {
@@ -309,7 +389,13 @@ function commandDir(segs: string[], inPlugin: boolean): boolean {
 /* Loading                                                                                      */
 /* ------------------------------------------------------------------------------------------ */
 
-async function load(cand: Candidate, kind: FileKind, agent: Agent, home: string, errors: string[]): Promise<SourceFile | undefined> {
+async function load(
+  cand: Candidate,
+  kind: FileKind,
+  agent: Agent,
+  home: string,
+  errors: string[],
+): Promise<SourceFile | undefined> {
   const displayPath = toDisplay(cand.abs, cand.scope, cand.base, home);
   const isClaudeJson = path.basename(cand.abs) === '.claude.json' && path.dirname(cand.abs) === home;
   let content = '';
@@ -333,7 +419,6 @@ async function load(cand: Candidate, kind: FileKind, agent: Agent, home: string,
       file.data = cand.abs.endsWith('.toml') ? parseToml(content) : parseJsonc(content);
     } catch (e) {
       file.parseError = (e as Error).message;
-      if (kind === 'config') errors.push(`Could not parse ${displayPath}: ${file.parseError}`);
     }
   }
   return file;
@@ -362,7 +447,17 @@ interface WalkOptions {
   state?: { truncated: boolean };
 }
 
-const AGENT_DIRS = new Set(['.claude', '.codex', '.cursor', '.gemini', '.agents', '.windsurf', '.claude-plugin', 'skills', 'plugins']);
+const AGENT_DIRS = new Set([
+  '.claude',
+  '.codex',
+  '.cursor',
+  '.gemini',
+  '.agents',
+  '.windsurf',
+  '.claude-plugin',
+  'skills',
+  'plugins',
+]);
 
 function shouldSkipDir(name: string, parent: string, insideSkill: boolean): boolean {
   if (name === '.git') return true;
@@ -493,8 +588,10 @@ export function extractServers(file: SourceFile): McpServer[] {
     for (const [name, def] of Object.entries(group)) {
       if (!isObj(def)) continue;
       const url = str(def.url) ?? str(def.httpUrl) ?? str(def.serverUrl);
-      const command = str(def.command);
-      const args = Array.isArray(def.args) ? def.args.map((a) => String(a)) : [];
+      const rawCommand = str(def.command);
+      const rawArgs = Array.isArray(def.args) ? def.args.map((a) => String(a)) : [];
+      // `cmd /c npx ...` and `sh -c "npx ..."` launch the real server; analyse that.
+      const { command, args, launcher } = unwrapShell(rawCommand, rawArgs);
       servers.push({
         name,
         file,
@@ -507,10 +604,14 @@ export function extractServers(file: SourceFile): McpServer[] {
         url,
         headers: { ...stringMap(def.headers), ...stringMap(def.http_headers) },
         raw: def,
+        launcher,
+        commandLine: [rawCommand ?? '', ...rawArgs].join(' ').trim(),
         project,
         line: lineOf(file.content, [`"${name}"`, `[mcp_servers.${name}]`, `[mcp_servers."${name}"]`, name], 1, from),
         // Only clients that document these keys honour them; elsewhere the server still starts.
-        disabled: (['cline', 'windsurf'].includes(file.agent) && def.disabled === true) || (file.agent === 'codex' && def.enabled === false),
+        disabled:
+          (['cline', 'windsurf'].includes(file.agent) && def.disabled === true) ||
+          (file.agent === 'codex' && def.enabled === false),
       });
     }
   }
@@ -540,9 +641,10 @@ export function extractHooks(file: SourceFile): HookCommand[] {
   return out;
 }
 
-function collectCommands(node: unknown, event: string, file: SourceFile, out: HookCommand[]): void {
+function collectCommands(node: unknown, event: string, file: SourceFile, out: HookCommand[], depth = 0): void {
+  if (depth > 32) return; // real hook configs are 3-4 levels deep
   if (Array.isArray(node)) {
-    for (const n of node) collectCommands(n, event, file, out);
+    for (const n of node) collectCommands(n, event, file, out, depth + 1);
     return;
   }
   if (!isObj(node)) return;
@@ -550,7 +652,7 @@ function collectCommands(node: unknown, event: string, file: SourceFile, out: Ho
     const escaped = JSON.stringify(node.command).slice(1, -1);
     out.push({ file, event, command: node.command, line: lineOf(file.content, [escaped, node.command, `"${event}"`]) });
   }
-  if (node.hooks !== undefined) collectCommands(node.hooks, event, file, out);
+  if (node.hooks !== undefined) collectCommands(node.hooks, event, file, out, depth + 1);
 }
 
 function str(v: unknown): string | undefined {
@@ -559,10 +661,134 @@ function str(v: unknown): string | undefined {
 
 function stringMap(v: unknown): Record<string, string> {
   if (!isObj(v)) return {};
-  const out: Record<string, string> = {};
+  // Null prototype: keys come from the scanned file and may be "__proto__".
+  const out: Record<string, string> = Object.create(null);
   for (const [k, val] of Object.entries(v)) {
     if (val === null || val === undefined) continue;
-    out[k] = typeof val === 'string' ? val : JSON.stringify(val);
+    out[k] = typeof val === 'string' ? val : safeStringify(val);
   }
   return out;
+}
+
+function safeStringify(v: unknown): string {
+  try {
+    return JSON.stringify(v).slice(0, 4096);
+  } catch {
+    return '[unserialisable]';
+  }
+}
+
+const SHELL_WRAPPERS: Record<string, string[]> = {
+  sh: ['-c', '-lc', '-ic'],
+  bash: ['-c', '-lc', '-ic'],
+  zsh: ['-c', '-lc', '-ic'],
+  dash: ['-c'],
+  cmd: ['/c', '/k', '/C', '/K'],
+  powershell: ['-command', '-c'],
+  pwsh: ['-command', '-c'],
+};
+const LAUNCHERS = /^(npx|bunx|pnpx|pnpm|yarn|npm|uvx|uv|pipx|docker|podman|node|python[0-9.]*|deno|bun)$/;
+
+/** Splits a shell command string into words, honouring simple quoting. */
+export function shellWords(cmd: string): string[] {
+  const words: string[] = [];
+  let cur = '';
+  let quote = '';
+  let has = false;
+  for (const ch of cmd) {
+    if (quote) {
+      if (ch === quote) quote = '';
+      else cur += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      has = true;
+    } else if (/\s/.test(ch)) {
+      if (cur || has) words.push(cur);
+      cur = '';
+      has = false;
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur || has) words.push(cur);
+  return words;
+}
+
+function unwrapShell(command: string | undefined, args: string[]): { command?: string; args: string[]; launcher?: string } {
+  if (!command) return { command, args };
+  const name = path
+    .basename(command)
+    .replace(/\.exe$/i, '')
+    .toLowerCase();
+  const flags = SHELL_WRAPPERS[name];
+  if (!flags) return { command, args };
+  const at = args.findIndex((a) => flags.includes(a) || flags.includes(a.toLowerCase()));
+  if (at === -1) return { command, args };
+  const rest = args.slice(at + 1);
+  // `cmd /c npx -y pkg` passes words; `sh -c "npx -y pkg"` passes one string.
+  const words = rest.length === 1 ? shellWords(rest[0]!) : rest;
+  // Pick the segment that launches a package, else the last one: `cd x && npx -y pkg`.
+  const segments: string[][] = [[]];
+  for (const w of words) {
+    if (['&&', '||', ';', '|', '&'].includes(w)) segments.push([]);
+    else segments[segments.length - 1]!.push(w);
+  }
+  const nonEmpty = segments.filter((seg) => seg.length > 0);
+  const chosen = nonEmpty.find((seg) => LAUNCHERS.test(path.basename(seg[0]!).toLowerCase())) ?? nonEmpty[nonEmpty.length - 1];
+  if (!chosen) return { command, args };
+  return { command: chosen[0], args: chosen.slice(1), launcher: [command, ...args.slice(0, at + 1)].join(' ') };
+}
+
+/* ------------------------------------------------------------------------------------------ */
+/* Indirect files                                                                               */
+/* ------------------------------------------------------------------------------------------ */
+
+const MAX_IMPORT_DEPTH = 5; // Claude Code follows CLAUDE.md imports up to five hops
+
+/**
+ * Files an agent loads because another file points at them:
+ * - `.claude-plugin/plugin.json` may inline `mcpServers`/`hooks` or reference files for them.
+ * - CLAUDE.md (and files it imports) can pull in other files with `@path/to/file`.
+ */
+async function indirectFiles(
+  file: SourceFile,
+  home: string,
+  confine?: string[],
+): Promise<Array<{ abs: string; kind: FileKind }>> {
+  const out: Array<{ abs: string; kind: FileKind }> = [];
+  const within = (abs: string) => !confine || confine.some((root) => abs === root || abs.startsWith(root + path.sep));
+
+  if (path.basename(file.path) === 'plugin.json' && isObj(file.data)) {
+    const pluginRoot = path.dirname(path.dirname(file.path));
+    for (const key of ['mcpServers', 'hooks', 'commands', 'agents', 'skills']) {
+      const refs = ([] as unknown[]).concat(file.data[key] ?? []).filter((v): v is string => typeof v === 'string');
+      for (const ref of refs) {
+        const abs = path.resolve(pluginRoot, ref.replace(/^\$\{CLAUDE_PLUGIN_ROOT\}[/\\]?/, ''));
+        if (!abs.startsWith(pluginRoot + path.sep) || !within(abs)) continue;
+        const st = await fs.stat(abs).catch(() => undefined);
+        if (st?.isFile())
+          out.push({ abs, kind: key === 'mcpServers' || key === 'hooks' ? 'config' : key === 'agents' ? 'subagent' : 'command' });
+      }
+    }
+  }
+
+  const importsAllowed =
+    (file.kind === 'instructions' && file.agent === 'claude-code') || (file.kind === 'reference' && (file.importDepth ?? 0) > 0);
+  if (importsAllowed && (file.importDepth ?? 0) < MAX_IMPORT_DEPTH) {
+    for (const m of file.content.matchAll(/(?:^|\s)@((?:~|\.{1,2})?\/?[\w.\-/]+\.[\w]+)/g)) {
+      const ref = m[1]!;
+      if (/^[\w.-]+\.(com|org|io|dev|net)$/i.test(ref)) continue; // @scope.com style mentions
+      const abs = ref.startsWith('~') ? path.join(home, ref.slice(1)) : path.resolve(path.dirname(file.path), ref);
+      if (!within(abs)) continue;
+      const st = await fs.stat(abs).catch(() => undefined);
+      if (st?.isFile()) out.push({ abs, kind: 'reference' });
+    }
+  }
+  return out;
+}
+
+function baseFor(file: SourceFile, home: string, roots: string[]): string {
+  if (file.scope === 'user') return home;
+  const root = roots.map((r) => path.resolve(r)).find((r) => file.path.startsWith(r + path.sep));
+  return root ?? path.dirname(file.path);
 }

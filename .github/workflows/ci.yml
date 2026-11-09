@@ -25,8 +25,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: npm run build
+      - name: Source is ASCII-only
+        run: node scripts/check-source.mjs
+      - name: Formatting
+        run: npm run format:check
       - run: npm test
+      - name: Coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        run: npm run coverage
+      - name: Generated docs are up to date
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        run: npm run docs:check
 
   runtime:
     # The CLI supports older Node versions than the test toolchain does.
@@ -59,9 +68,36 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./
+        id: bekci
         with:
           path: .
+      - name: Repository must stay at grade A
+        env:
+          GRADE: ${{ steps.bekci.outputs.grade }}
+        run: test "$GRADE" = "A"
+
+  action-demo:
+    # The action must fail on the intentionally malicious example and still report it.
+    name: Action fails on the poisoned example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./
+        id: bekci
+        continue-on-error: true
+        with:
+          path: examples/poisoned-plugin
+          upload-sarif: 'false'
+          args: --no-config
+      - name: Check outputs
+        env:
+          OUTCOME: ${{ steps.bekci.outcome }}
+          GRADE: ${{ steps.bekci.outputs.grade }}
+        run: |
+          test "$OUTCOME" = "failure"
+          test "$GRADE" = "F"

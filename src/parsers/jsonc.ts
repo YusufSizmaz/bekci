@@ -3,7 +3,7 @@
  * and Gemini CLI config files). String contents are never modified.
  */
 export function parseJsonc(text: string): unknown {
-  return JSON.parse(stripTrailingCommas(stripComments(text.replace(/^﻿/, ''))));
+  return JSON.parse(stripTrailingCommas(stripComments(text.replace(/^\uFEFF/, ''))));
 }
 
 function stripComments(text: string): string {

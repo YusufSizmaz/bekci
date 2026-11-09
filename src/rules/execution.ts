@@ -6,18 +6,30 @@ import { executableUnits, hits, promptFiles, type TextUnit, where } from './help
 const SHELLS = '(?:sudo\\s+(?:-\\S+\\s+)*)?(?:ba|z|da|k|fi|c|tc)?sh';
 const INTERPRETERS = '(?:sudo\\s+)?(?:python[0-9.]*|node|perl|ruby|php|deno\\s+run|bun|osascript|pwsh|powershell)';
 
+/** A shell or interpreter, optionally by absolute path or via `env`. */
+const RUNNER = `(?:sudo\\s+(?:-\\S+\\s+)*)?(?:(?:/usr)?(?:/local)?/s?bin/)?(?:env\\s+(?:-\\S+\\s+)*)?(?:(?:ba|z|da|k|fi|c|tc)?sh|${INTERPRETERS.replace('(?:sudo\\s+)?', '')})`;
+
 const RCE_PATTERNS: RegExp[] = [
-  new RegExp(`\\b(curl|wget)\\s+[^\\s|;&][^\\n|;&]{0,300}\\|\\s*(${SHELLS}|${INTERPRETERS})\\b`, 'i'),
-  new RegExp(`\\b(${SHELLS}|${INTERPRETERS}|source|\\.)\\s+(-c\\s+)?["']?\\s*<\\(\\s*(curl|wget)\\b`, 'i'),
-  /\beval\s+["']?\$\(\s*(curl|wget)\b/i,
-  /\b(sh|bash|zsh)\s+-c\s+["']?\$\(\s*(curl|wget)\b/i,
+  // curl ... | sh, including `| tee f | sh`, `|& bash`, URLs with `&`, `/bin/bash`, `env bash`
+  new RegExp(`\\b(curl|wget|fetch)\\s+[^\\s|;&][^\\n;]{0,300}?\\|&?\\s*${RUNNER}\\b`, 'i'),
+  // bash <(curl ...), . <(curl ...), source <(curl ...)
+  new RegExp(`(?:^|[\\s;&|(])(?:${RUNNER}|source|\\.)\\s+(?:-c\\s+)?["']?\\s*<\\(\\s*(curl|wget)\\b`, 'im'),
+  // eval "$(curl ...)", bash -c "$(curl ...)", node -e "$(curl ...)", python3 -c "$(curl ...)"
+  new RegExp(`(?:\\beval|${RUNNER}\\s+-[ce])\\s+["']?\\$\\(\\s*(curl|wget)\\b`, 'i'),
   /\b(iex|invoke-expression)\b[^\n]{0,300}\b(iwr|irm|invoke-webrequest|invoke-restmethod|downloadstring|net\.webclient)\b/i,
   /\b(iwr|irm|invoke-webrequest|invoke-restmethod)\b[^\n]{0,300}\|\s*(iex|invoke-expression)\b/i,
-  /\bpython[0-9.]*\s+-c\s+["'][^"'\n]*\burllib\.request\.urlopen\([^)]*\)\.read\(\)[^"'\n]*\bexec\b/i,
+  // exec(urlopen(...).read()), eval(requests.get(...).text), eval(await (await fetch(...)).text())
+  /\b(exec|eval)\s*\([^\n]{0,120}\b(urlopen|urllib\.request|requests\.get|httpx\.get)\s*\(/i,
+  /\b(eval|Function|new\s+Function)\s*\([^\n]{0,120}\bfetch\s*\(/,
 ];
 
+/**
+ * Executable contexts (hooks, servers, scripts) and agent-facing skill/command files get the base
+ * severity; project instruction files (CLAUDE.md, AGENTS.md), which mostly document setup for
+ * humans, get the lower one.
+ */
 function unitSeverity(unit: TextUnit, base: Severity, inDocs: Severity): Severity {
-  return MARKDOWN_KINDS.has(unit.file.kind) && !unit.label ? inDocs : base;
+  return (unit.file.kind === 'instructions' || unit.file.kind === 'reference') && !unit.label ? inDocs : base;
 }
 
 export const remoteCodeExecution: Rule = {
@@ -27,11 +39,12 @@ export const remoteCodeExecution: Rule = {
   severity: 'high',
   category: 'code-execution',
   description:
-    'A command pipes content fetched from the network straight into a shell or interpreter (`curl … | sh`, ' +
-    '`bash <(curl …)`, `iex (iwr …)`). Whatever the server returns at that moment runs with your privileges, ' +
-    'and it can change after you reviewed it. Reported as high in hooks, MCP server commands and scripts, and ' +
-    'as medium when it appears in instructions the agent may follow.',
-  remediation: 'Download the script, review it, pin it by checksum, then run the local copy, or install from a package manager with a pinned version.',
+    'A command pipes content fetched from the network straight into a shell or interpreter (`curl \u2026 | sh`, ' +
+    '`bash <(curl \u2026)`, `iex (iwr \u2026)`). Whatever the server returns at that moment runs with your privileges, ' +
+    'and it can change after you reviewed it. Reported as high in hooks, MCP server commands, scripts, skills and ' +
+    'commands, and as medium in project instruction files such as CLAUDE.md.',
+  remediation:
+    'Download the script, review it, pin it by checksum, then run the local copy, or install from a package manager with a pinned version.',
   run(ctx, report) {
     for (const unit of executableUnits(ctx)) {
       const lines = new Set<number>();
@@ -116,7 +129,7 @@ export const obfuscatedPayload: Rule = {
   },
 };
 
-const DESTRUCTIVE: Array<[RegExp, string, Severity]> = [
+const DESTRUCTIVE: Array<[RegExp, string, Severity, boolean?]> = [
   [
     /\brm\s+(?:--?[^\s-][\w-]*\s+){0,20}?(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(?:\s+--?[^\s-][\w-]*){0,20}\s+["']?(\/\*?|~\/?\*?|\$\{?HOME\}?\/?\*?)["']?(?=\s|$|[;&|)`"'])/,
     'recursively deletes the root or home directory',
@@ -128,10 +141,14 @@ const DESTRUCTIVE: Array<[RegExp, string, Severity]> = [
   [/:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, 'fork bomb', 'high'],
   [/\bdiskutil\s+(eraseDisk|zeroDisk|secureErase|eraseVolume)\b/, 'erases a disk', 'high'],
   [/\bchmod\s+(-R\s+)?0?777\s+(\/|~|\$HOME)(\s|$)/, 'makes the root or home directory world-writable', 'medium'],
-  [/\bRemove-Item\b[^\n]{0,300}-Recurse[^\n]{0,300}(C:\\\s|C:\\$|\$env:USERPROFILE|\$HOME|~)/i, 'recursively deletes the system drive or user profile', 'high'],
+  [
+    /\bRemove-Item\b[^\n]{0,300}-Recurse[^\n]{0,300}(C:\\\s|C:\\$|\$env:USERPROFILE|\$HOME|~)/i,
+    'recursively deletes the system drive or user profile',
+    'high',
+  ],
   [/\bgit\s+push\b[^\n]{0,300}\s(--force|-f)(\s|$)/, 'force-pushes, rewriting remote history', 'low'],
   [/\bgit\s+reset\s+--hard\s+origin/, 'discards local work with git reset --hard', 'low'],
-  [/\b(DROP\s+(DATABASE|SCHEMA)|TRUNCATE\s+TABLE)\b/, 'drops or truncates database objects', 'medium'],
+  [/\b(DROP\s+(DATABASE|SCHEMA)|TRUNCATE\s+TABLE)\b/, 'drops or truncates database objects', 'medium', true],
 ];
 
 export const destructiveCommand: Rule = {
@@ -142,13 +159,16 @@ export const destructiveCommand: Rule = {
   category: 'code-execution',
   description:
     'A hook, script, MCP server command or instruction contains a command that destroys data (`rm -rf ~`, ' +
-    '`mkfs`, `dd of=/dev/…`, force pushes). An agent that follows the instruction, or a hook that fires on every ' +
+    '`mkfs`, `dd of=/dev/\u2026`, force pushes). An agent that follows the instruction, or a hook that fires on every ' +
     'tool call, can do irreversible damage.',
   remediation: 'Scope destructive commands to an explicit, safe path and require confirmation before running them.',
   run(ctx, report) {
     for (const unit of executableUnits(ctx)) {
       const lines = new Set<number>();
-      for (const [re, what, sev] of DESTRUCTIVE) {
+      const docs = MARKDOWN_KINDS.has(unit.file.kind) && !unit.label;
+      for (const [re, what, sev, executableOnly] of DESTRUCTIVE) {
+        // SQL in documentation is almost always an example, not an instruction.
+        if (executableOnly && docs) continue;
         for (const h of hits(unit, re)) {
           if (lines.has(h.line)) continue;
           lines.add(h.line);

@@ -2,7 +2,7 @@ import { findRule } from '../rules/index.js';
 import type { ScanOutput } from '../scan.js';
 import { AGENT_LABELS, SEVERITIES } from '../types.js';
 
-const ICON = { critical: '🟣', high: '🔴', medium: '🟠', low: '🔵', info: '⚪' } as const;
+const ICON = { critical: '\u{1F7E3}', high: '\u{1F534}', medium: '\u{1F7E0}', low: '\u{1F535}', info: '\u26AA' } as const;
 
 export function renderMarkdown(result: ScanOutput): string {
   const lines: string[] = [];
@@ -11,24 +11,25 @@ export function renderMarkdown(result: ScanOutput): string {
     .map((s) => ({ s, n: result.findings.filter((f) => f.severity === s).length }))
     .filter(({ n }) => n > 0);
 
-  lines.push(`## 🛡️ bekci report: grade **${result.grade}** (${result.score}/100)`);
+  lines.push(`## \u{1F6E1}\uFE0F bekci report: grade **${result.grade}** (${result.score}/100)`);
   lines.push('');
   lines.push(
-    `Scanned ${result.stats.files} files, ${result.stats.servers} MCP servers, ${result.stats.skills} skills and ` +
-      `${result.stats.hooks} hooks across ${result.stats.agents.map((a) => AGENT_LABELS[a]).join(', ') || 'no agents'}.`,
+    `Scanned ${plural(result.stats.files, 'file')}, ${plural(result.stats.servers, 'MCP server')}, ` +
+      `${plural(result.stats.skills, 'skill')} and ${plural(result.stats.hooks, 'hook')} across ` +
+      `${result.stats.agents.map((a) => AGENT_LABELS[a]).join(', ') || 'no agents'}.`,
   );
   lines.push('');
   if (!result.findings.length) {
-    lines.push('✅ No issues found.');
+    lines.push('\u2705 No issues found.');
     return lines.join('\n') + '\n';
   }
-  lines.push(counts.map(({ s, n }) => `${ICON[s]} **${n}** ${s}`).join(' · '));
+  lines.push(counts.map(({ s, n }) => `${ICON[s]} **${n}** ${s}`).join(' \u00B7 '));
   lines.push('');
   lines.push('| Severity | Rule | Location | Finding |');
   lines.push('| --- | --- | --- | --- |');
   for (const f of result.findings) {
     const loc = f.line ? `${f.file}:${f.line}` : f.file;
-    lines.push(`| ${ICON[f.severity]} ${f.severity} | \`${f.ruleId}\` ${esc(f.title)} | \`${esc(loc)}\` | ${esc(f.message)} |`);
+    lines.push(`| ${ICON[f.severity]} ${f.severity} | \`${f.ruleId}\` ${esc(f.title)} | ${code(loc)} | ${rich(f.message)} |`);
   }
   lines.push('');
   lines.push('<details><summary>How to fix</summary>');
@@ -44,6 +45,44 @@ export function renderMarkdown(result: ScanOutput): string {
   return lines.join('\n') + '\n';
 }
 
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+const ENTITY: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '|': '&#124;',
+  '[': '&#91;',
+  ']': '&#93;',
+  '(': '&#40;',
+  ')': '&#41;',
+  '*': '&#42;',
+  _: '&#95;',
+  '~': '&#126;',
+  '!': '&#33;',
+  '`': '&#96;',
+  '\\': '&#92;',
+  '#': '&#35;',
+};
+
+/**
+ * Escapes attacker-controlled text for a GFM table cell. Entities (not backslashes) keep it
+ * literal everywhere, including inside <code>: no HTML, links, emphasis or broken columns.
+ */
 function esc(s: string): string {
-  return s.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  return s.replace(/\r?\n/g, ' ').replace(/[&<>|[\]()*_~!`\\#]/g, (c) => ENTITY[c]!);
+}
+
+function code(s: string): string {
+  return `<code>${esc(s)}</code>`;
+}
+
+/** Renders our own `code` spans in a message while escaping everything else. */
+function rich(message: string): string {
+  return message
+    .split('`')
+    .map((part, i) => (i % 2 ? code(part) : esc(part)))
+    .join('');
 }

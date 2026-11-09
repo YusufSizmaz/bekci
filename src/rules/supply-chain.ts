@@ -13,17 +13,79 @@ export interface PackageRef {
 
 const NPM_RUNNERS = new Set(['npx', 'bunx', 'pnpx']);
 /** Flags that take a value, per runner family. */
-const NPX_VALUE_FLAGS = new Set(['-p', '--package', '--registry', '--cache', '--userconfig', '-c', '--call', '-w', '--workspace']);
-const UVX_VALUE_FLAGS = new Set(['--from', '--with', '-w', '--python', '-p', '--index', '--index-url', '--extra-index-url', '--default-index', '--with-requirements', '--with-editable', '--constraint']);
+const NPX_VALUE_FLAGS = new Set([
+  '-p',
+  '--package',
+  '--registry',
+  '--cache',
+  '--userconfig',
+  '-c',
+  '--call',
+  '-w',
+  '--workspace',
+]);
+const UVX_VALUE_FLAGS = new Set([
+  '--from',
+  '--with',
+  '-w',
+  '--python',
+  '-p',
+  '--index',
+  '--index-url',
+  '--extra-index-url',
+  '--default-index',
+  '--with-requirements',
+  '--with-editable',
+  '--constraint',
+]);
 const DOCKER_VALUE_FLAGS = new Set([
-  '-e', '--env', '-v', '--volume', '--name', '-p', '--publish', '--network', '--net', '--mount', '-w', '--workdir',
-  '-u', '--user', '--entrypoint', '--env-file', '-l', '--label', '--platform', '-m', '--memory', '--cpus', '--add-host',
-  '--cap-add', '--cap-drop', '--security-opt', '--pid', '--ipc', '--device', '--tmpfs', '--hostname', '-h', '--runtime',
-  '--pull', '--ulimit', '--log-driver', '--restart', '--group-add', '--dns', '--shm-size',
+  '-e',
+  '--env',
+  '-v',
+  '--volume',
+  '--name',
+  '-p',
+  '--publish',
+  '--network',
+  '--net',
+  '--mount',
+  '-w',
+  '--workdir',
+  '-u',
+  '--user',
+  '--entrypoint',
+  '--env-file',
+  '-l',
+  '--label',
+  '--platform',
+  '-m',
+  '--memory',
+  '--cpus',
+  '--add-host',
+  '--cap-add',
+  '--cap-drop',
+  '--security-opt',
+  '--pid',
+  '--ipc',
+  '--device',
+  '--tmpfs',
+  '--hostname',
+  '-h',
+  '--runtime',
+  '--pull',
+  '--ulimit',
+  '--log-driver',
+  '--restart',
+  '--group-add',
+  '--dns',
+  '--shm-size',
 ]);
 
 function bin(command: string): string {
-  return path.basename(command).replace(/\.(cmd|exe|bat|ps1)$/i, '').toLowerCase();
+  return path
+    .basename(command)
+    .replace(/\.(cmd|exe|bat|ps1)$/i, '')
+    .toLowerCase();
 }
 
 function firstPositional(args: string[], valueFlags: Set<string>): { value?: string; fromFlag?: string } {
@@ -112,7 +174,9 @@ export const unpinnedPackage: Rule = {
       if (s.disabled) continue;
       const ref = packageRef(s);
       if (!ref || isPinned(ref)) continue;
-      const how = ref.version ? `version "${ref.version}" is not an exact pin` : 'no version pinned, so the latest release runs on every start';
+      const how = ref.version
+        ? `version "${ref.version}" is not an exact pin`
+        : 'no version pinned, so the latest release runs on every start';
       report({ file: s.file, line: s.line, message: `MCP server "${s.name}" runs \`${ref.runner} ${ref.spec}\`: ${how}` });
     }
   },
@@ -130,7 +194,7 @@ export const insecureRemote: Rule = {
   description:
     'A remote MCP server is reached over unencrypted `http://` or `ws://`. Anyone on the network path can read ' +
     'your prompts, tool results and tokens, or inject their own tool definitions and responses.',
-  remediation: 'Use the server\'s `https://` endpoint. Plain HTTP is only acceptable for loopback addresses.',
+  remediation: "Use the server's `https://` endpoint. Plain HTTP is only acceptable for loopback addresses.",
   run(ctx, report) {
     for (const s of ctx.servers) {
       if (!s.url || s.disabled) continue;
@@ -177,10 +241,11 @@ export const privilegedContainer: Rule = {
         if (a === '--privileged') problems.push('--privileged');
         if ((flag === '--network' || flag === '--net') && val === 'host') problems.push('host network');
         if ((flag === '--pid' || flag === '--ipc') && val === 'host') problems.push(`host ${flag.slice(2)} namespace`);
-        if (flag === '--cap-add' && /^(ALL|SYS_ADMIN|SYS_PTRACE|NET_ADMIN|SYS_MODULE|DAC_READ_SEARCH)$/i.test(val)) problems.push(`--cap-add ${val}`);
+        if (flag === '--cap-add' && /^(ALL|SYS_ADMIN|SYS_PTRACE|NET_ADMIN|SYS_MODULE|DAC_READ_SEARCH)$/i.test(val))
+          problems.push(`--cap-add ${val}`);
         if (flag === '--security-opt' && /(seccomp|apparmor)[=:]unconfined/.test(val)) problems.push(`--security-opt ${val}`);
         if (flag === '-v' || flag === '--volume' || flag === '--mount') {
-          const source = flag === '--mount' ? /(?:source|src)=([^,]+)/.exec(val)?.[1] ?? '' : val.split(':')[0] ?? '';
+          const source = flag === '--mount' ? (/(?:source|src)=([^,]+)/.exec(val)?.[1] ?? '') : (val.split(':')[0] ?? '');
           if (/docker\.sock$/.test(source)) problems.push('Docker socket mounted');
           else if (isRootOrHome(source)) problems.push(`host path "${source}" mounted`);
         }
@@ -218,7 +283,11 @@ export const broadFilesystem: Rule = {
       if (s.disabled || !s.command || /^(docker|podman)$/.test(bin(s.command))) continue;
       const broad = s.args.filter((a) => isRootOrHome(a));
       if (broad.length) {
-        report({ file: s.file, line: s.line, message: `MCP server "${s.name}" is given ${broad.map((b) => `"${b}"`).join(', ')}` });
+        report({
+          file: s.file,
+          line: s.line,
+          message: `MCP server "${s.name}" is given ${broad.map((b) => `"${b}"`).join(', ')}`,
+        });
       }
     }
   },
@@ -226,22 +295,71 @@ export const broadFilesystem: Rule = {
 
 /** Well-known MCP packages; used to spot look-alike names. */
 export const KNOWN_PACKAGES = [
-  '@modelcontextprotocol/server-filesystem', '@modelcontextprotocol/server-github', '@modelcontextprotocol/server-gitlab',
-  '@modelcontextprotocol/server-memory', '@modelcontextprotocol/server-everything', '@modelcontextprotocol/server-sequential-thinking',
-  '@modelcontextprotocol/server-puppeteer', '@modelcontextprotocol/server-brave-search', '@modelcontextprotocol/server-google-maps',
-  '@modelcontextprotocol/server-slack', '@modelcontextprotocol/server-postgres', '@modelcontextprotocol/server-redis',
-  '@modelcontextprotocol/server-gdrive', '@modelcontextprotocol/server-aws-kb-retrieval', '@modelcontextprotocol/server-everart',
-  '@modelcontextprotocol/inspector', '@playwright/mcp', '@upstash/context7-mcp', '@notionhq/notion-mcp-server',
-  '@supabase/mcp-server-supabase', '@browserbasehq/mcp-server-browserbase', '@stripe/mcp', '@sentry/mcp-server',
-  '@cloudflare/mcp-server-cloudflare', '@heroku/mcp-server', '@azure/mcp', '@brightdata/mcp', '@21st-dev/magic',
-  '@executeautomation/playwright-mcp-server', '@wonderwhy-er/desktop-commander', '@agentdeskai/browser-tools-mcp',
-  '@anthropic-ai/claude-code', '@openai/codex', '@google/gemini-cli', '@vercel/mcp-adapter', '@neondatabase/mcp-server-neon',
-  '@shopify/dev-mcp', '@hubspot/mcp-server', '@mongodb-js/mongodb-mcp-server', '@elastic/mcp-server-elasticsearch',
-  '@pinecone-database/mcp', '@kimtaeyoon83/mcp-server-youtube-transcript', '@benborla29/mcp-server-mysql',
-  'firecrawl-mcp', 'exa-mcp-server', 'tavily-mcp', 'figma-developer-mcp', 'chrome-devtools-mcp', 'mcp-remote',
-  'task-master-ai', 'context7-mcp', 'mcp-server-fetch', 'mcp-server-git', 'mcp-server-time', 'mcp-server-sqlite',
-  'mcp-server-qdrant', 'mcp-server-kubernetes', 'mcp-server-docker', 'mcp-atlassian', 'serena', 'markitdown-mcp',
-  'awslabs.core-mcp-server', 'awslabs.aws-documentation-mcp-server', 'duckduckgo-mcp-server', 'mcp-obsidian',
+  '@modelcontextprotocol/server-filesystem',
+  '@modelcontextprotocol/server-github',
+  '@modelcontextprotocol/server-gitlab',
+  '@modelcontextprotocol/server-memory',
+  '@modelcontextprotocol/server-everything',
+  '@modelcontextprotocol/server-sequential-thinking',
+  '@modelcontextprotocol/server-puppeteer',
+  '@modelcontextprotocol/server-brave-search',
+  '@modelcontextprotocol/server-google-maps',
+  '@modelcontextprotocol/server-slack',
+  '@modelcontextprotocol/server-postgres',
+  '@modelcontextprotocol/server-redis',
+  '@modelcontextprotocol/server-gdrive',
+  '@modelcontextprotocol/server-aws-kb-retrieval',
+  '@modelcontextprotocol/server-everart',
+  '@modelcontextprotocol/inspector',
+  '@playwright/mcp',
+  '@upstash/context7-mcp',
+  '@notionhq/notion-mcp-server',
+  '@supabase/mcp-server-supabase',
+  '@browserbasehq/mcp-server-browserbase',
+  '@stripe/mcp',
+  '@sentry/mcp-server',
+  '@cloudflare/mcp-server-cloudflare',
+  '@heroku/mcp-server',
+  '@azure/mcp',
+  '@brightdata/mcp',
+  '@21st-dev/magic',
+  '@executeautomation/playwright-mcp-server',
+  '@wonderwhy-er/desktop-commander',
+  '@agentdeskai/browser-tools-mcp',
+  '@anthropic-ai/claude-code',
+  '@openai/codex',
+  '@google/gemini-cli',
+  '@vercel/mcp-adapter',
+  '@neondatabase/mcp-server-neon',
+  '@shopify/dev-mcp',
+  '@hubspot/mcp-server',
+  '@mongodb-js/mongodb-mcp-server',
+  '@elastic/mcp-server-elasticsearch',
+  '@pinecone-database/mcp',
+  '@kimtaeyoon83/mcp-server-youtube-transcript',
+  '@benborla29/mcp-server-mysql',
+  'firecrawl-mcp',
+  'exa-mcp-server',
+  'tavily-mcp',
+  'figma-developer-mcp',
+  'chrome-devtools-mcp',
+  'mcp-remote',
+  'task-master-ai',
+  'context7-mcp',
+  'mcp-server-fetch',
+  'mcp-server-git',
+  'mcp-server-time',
+  'mcp-server-sqlite',
+  'mcp-server-qdrant',
+  'mcp-server-kubernetes',
+  'mcp-server-docker',
+  'mcp-atlassian',
+  'serena',
+  'markitdown-mcp',
+  'awslabs.core-mcp-server',
+  'awslabs.aws-documentation-mcp-server',
+  'duckduckgo-mcp-server',
+  'mcp-obsidian',
 ];
 
 const TRUSTED_SCOPES = new Set(KNOWN_PACKAGES.filter((p) => p.startsWith('@')).map((p) => p.split('/')[0]!));
@@ -279,13 +397,18 @@ export const typosquat: Rule = {
   description:
     'The package name is one or two characters away from a popular MCP server, or reuses an official package ' +
     'name under a different scope. Typosquatting is the most common way malicious packages reach developer machines.',
-  remediation: 'Check the exact package name on the registry and in the vendor\'s documentation, then fix the config.',
+  remediation: "Check the exact package name on the registry and in the vendor's documentation, then fix the config.",
   run(ctx, report) {
     for (const s of ctx.servers) {
       const ref = packageRef(s);
       if (!ref || (ref.ecosystem !== 'npm' && ref.ecosystem !== 'pypi')) continue;
       const target = lookalike(ref.name);
-      if (target) report({ file: s.file, line: s.line, message: `MCP server "${s.name}" runs "${ref.name}", which looks like "${target}"` });
+      if (target)
+        report({
+          file: s.file,
+          line: s.line,
+          message: `MCP server "${s.name}" runs "${ref.name}", which looks like "${target}"`,
+        });
     }
   },
 };
@@ -323,6 +446,32 @@ export const unscannableFile: Rule = {
     for (const file of ctx.files) {
       if (!file.tooLarge) continue;
       report({ file, message: `${(file.tooLarge / 1024 / 1024).toFixed(1)} MB ${file.kind} file was not scanned (limit 2 MB)` });
+    }
+  },
+};
+
+export const unparseableConfig: Rule = {
+  id: 'BK208',
+  name: 'unparseable-config',
+  title: 'Agent config could not be analysed',
+  severity: 'high',
+  category: 'supply-chain',
+  description:
+    'An MCP, settings or hooks file failed to parse, so the servers, permissions and hooks it defines were not ' +
+    'checked. If the agent reads the file with a more lenient parser, whatever it contains still takes effect. ' +
+    'Reported as high in the scanned project and medium in your own user-level config.',
+  remediation:
+    'Fix the syntax error (the message shows where). If the file is valid for your agent, please report it as a bekci bug.',
+  run(ctx, report) {
+    for (const file of ctx.files) {
+      if (file.kind !== 'config' || !file.parseError) continue;
+      const line = /line (\d+)/.exec(file.parseError)?.[1];
+      report({
+        file,
+        line: line ? Number(line) : undefined,
+        severity: file.scope === 'project' ? 'high' : 'medium',
+        message: `Not analysed: ${file.parseError}`,
+      });
     }
   },
 };

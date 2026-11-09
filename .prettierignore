@@ -1,0 +1,8 @@
+dist/
+coverage/
+node_modules/
+docs/rules.md
+assets/
+examples/
+package-lock.json
+*.md
