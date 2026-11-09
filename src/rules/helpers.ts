@@ -68,10 +68,21 @@ export function where(unit: TextUnit, message: string): string {
   return unit.label ? `${unit.label}: ${message}` : message;
 }
 
+let fenceText: string | undefined;
+let fenceOffsets: number[] = [];
+
+/** True when `index` is inside a fenced code block. Fence positions are cached per text. */
 export function isInsideFencedCode(text: string, index: number): boolean {
-  const before = text.slice(0, index);
-  const fences = before.match(/^\s*(```|~~~)/gm);
-  return (fences?.length ?? 0) % 2 === 1;
+  if (text !== fenceText) {
+    fenceOffsets = [...text.matchAll(/^[ \t]*(```|~~~)/gm)].map((m) => m.index!);
+    fenceText = text;
+  }
+  let count = 0;
+  for (const off of fenceOffsets) {
+    if (off >= index) break;
+    count++;
+  }
+  return count % 2 === 1;
 }
 
 /** True when `index` sits in a line comment (`//`, `#`, `--`, `;`, `REM`) or a block-comment line. */

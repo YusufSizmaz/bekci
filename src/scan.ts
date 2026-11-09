@@ -3,7 +3,8 @@ import { discover } from './discover.js';
 import { findRule, RULES } from './rules/index.js';
 import type { Agent, Finding, Rule, ScanContext, ScanResult, Severity } from './types.js';
 import { severityRank } from './types.js';
-import { globToRegExp, lineText } from './util/text.js';
+import { redactSecrets } from './rules/secrets.js';
+import { globToRegExp, lineText, sanitize } from './util/text.js';
 
 const pkg = createRequire(import.meta.url)('../package.json') as { version: string };
 export const VERSION = pkg.version;
@@ -69,9 +70,9 @@ export async function scan(options: ScanOptions = {}): Promise<ScanOutput> {
         if (severityRank(severity) < minRank) return;
         const file = input.file;
         if (pathFilters.some((re) => re.test(file.displayPath))) return;
-        // Critical findings cannot be silenced from inside the scanned file itself: an attacker
-        // controls that file. Use --ignore or a config file instead.
-        if (inlineIgnores && severity !== 'critical' && input.line && isSuppressed(file.content, input.line, rule.id)) {
+        // Inline comments are written by whoever wrote the file. Only honour them in the project
+        // being scanned (not in installed third-party skills/plugins), and never for criticals.
+        if (inlineIgnores && severity !== 'critical' && file.scope === 'project' && input.line && isSuppressed(file.content, input.line, rule.id)) {
           suppressed++;
           return;
         }
@@ -84,13 +85,15 @@ export async function scan(options: ScanOptions = {}): Promise<ScanOutput> {
           category: rule.category,
           severity,
           title: rule.title,
-          message: input.message,
-          file: file.displayPath,
+          // Everything below may contain attacker-controlled text: never let it carry terminal
+          // escapes or a full secret into any report.
+          message: redactSecrets(sanitize(input.message)),
+          file: sanitize(file.displayPath),
           absPath: file.path,
           agent: file.agent,
           line: input.line,
           column: input.column,
-          evidence: input.evidence,
+          evidence: input.evidence === undefined ? undefined : redactSecrets(sanitize(input.evidence)),
         });
       });
     } catch (e) {
@@ -124,6 +127,7 @@ export async function scan(options: ScanOptions = {}): Promise<ScanOutput> {
     grade,
     errors,
     suppressed,
+    incomplete: found.truncated,
   };
 }
 

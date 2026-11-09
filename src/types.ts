@@ -68,6 +68,8 @@ export interface SourceFile {
    * prompt history). Only the structured parts (MCP servers) are analysed.
    */
   rawScan: boolean;
+  /** Size in bytes when the file exceeded the scan limit and its content was not read. */
+  tooLarge?: number;
 }
 
 export interface McpServer {
@@ -171,4 +173,6 @@ export interface ScanResult {
   score: number;
   grade: 'A' | 'B' | 'C' | 'D' | 'F';
   errors: string[];
+  /** Some files could not be examined (file limit reached). Do not treat the result as clean. */
+  incomplete: boolean;
 }

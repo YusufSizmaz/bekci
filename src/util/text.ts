@@ -3,17 +3,39 @@ export interface Position {
   column: number;
 }
 
-/** Converts a string offset into a 1-based line/column. */
+let cachedText: string | undefined;
+let cachedStarts: number[] = [];
+
+/** Offsets at which each line starts. Cached for the most recent text (rules scan one file at a time). */
+export function lineStarts(text: string): number[] {
+  if (text === cachedText) return cachedStarts;
+  const starts = [0];
+  for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) starts.push(i + 1);
+  cachedText = text;
+  cachedStarts = starts;
+  return starts;
+}
+
+/** Converts a string offset into a 1-based line/column in O(log n). */
 export function positionAt(text: string, offset: number): Position {
-  let line = 1;
-  let lineStart = 0;
-  for (let i = 0; i < offset && i < text.length; i++) {
-    if (text.charCodeAt(i) === 10) {
-      line++;
-      lineStart = i + 1;
-    }
+  const starts = lineStarts(text);
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid]! <= offset) lo = mid;
+    else hi = mid - 1;
   }
-  return { line, column: offset - lineStart + 1 };
+  return { line: lo + 1, column: offset - starts[lo]! + 1 };
+}
+
+/** Removes terminal control sequences and bidi controls from text taken from scanned files. */
+export function sanitize(s: string): string {
+  return s
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, (ch) => `\\x${ch.charCodeAt(0).toString(16).padStart(2, '0')}`)
+    .replace(/[\u202A-\u202E\u2066-\u2069\u200B-\u200F\u2060\uFEFF]/g, (ch) => `<U+${ch.charCodeAt(0).toString(16).toUpperCase()}>`)
+    .replace(/[\u{E0000}-\u{E007F}]/gu, '');
 }
 
 /** Line (1-based) of the first occurrence of any needle, or `fallback`. */
@@ -28,12 +50,9 @@ export function lineOf(text: string, needles: string[], fallback = 1, from = 0):
 
 /** The text of a 1-based line. */
 export function lineText(text: string, line: number): string {
-  let start = 0;
-  for (let l = 1; l < line; l++) {
-    const nl = text.indexOf('\n', start);
-    if (nl === -1) return '';
-    start = nl + 1;
-  }
+  const starts = lineStarts(text);
+  if (line < 1 || line > starts.length) return '';
+  const start = starts[line - 1]!;
   const end = text.indexOf('\n', start);
   return text.slice(start, end === -1 ? text.length : end).replace(/\r$/, '');
 }

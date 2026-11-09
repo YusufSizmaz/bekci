@@ -297,7 +297,8 @@ class TomlParser {
   private table(base: Table, path: string[]): Table {
     let t = base;
     for (const part of path) {
-      let next = t[part];
+      this.checkKey(part);
+      let next = Object.prototype.hasOwnProperty.call(t, part) ? t[part] : undefined;
       if (Array.isArray(next)) next = next[next.length - 1];
       if (next === undefined) {
         next = {};
@@ -312,7 +313,8 @@ class TomlParser {
   private arrayTable(path: string[]): Table {
     const parent = this.table(this.root, path.slice(0, -1));
     const last = path[path.length - 1]!;
-    const existing = parent[last];
+    this.checkKey(last);
+    const existing = Object.prototype.hasOwnProperty.call(parent, last) ? parent[last] : undefined;
     const entry: Table = {};
     if (existing === undefined) parent[last] = [entry];
     else if (Array.isArray(existing)) existing.push(entry);
@@ -322,6 +324,13 @@ class TomlParser {
 
   private assign(base: Table, path: string[], value: unknown): void {
     const t = this.table(base, path.slice(0, -1));
-    t[path[path.length - 1]!] = value;
+    const key = path[path.length - 1]!;
+    this.checkKey(key);
+    t[key] = value;
+  }
+
+  /** Scanned files are attacker-controlled: never let them touch Object.prototype. */
+  private checkKey(key: string): void {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') this.error(`forbidden key '${key}'`);
   }
 }

@@ -54,6 +54,8 @@ export interface Discovery {
   servers: McpServer[];
   hooks: HookCommand[];
   errors: string[];
+  /** True when a file-count limit was hit and some files were not looked at. */
+  truncated: boolean;
 }
 
 interface Candidate {
@@ -66,6 +68,7 @@ interface Candidate {
 export async function discover(opts: DiscoverOptions): Promise<Discovery> {
   const home = path.resolve(opts.home ?? os.homedir());
   const errors: string[] = [];
+  const state = { truncated: false };
   const candidates = new Map<string, Candidate>();
   const pluginRoots = new Set<string>();
 
@@ -92,7 +95,7 @@ export async function discover(opts: DiscoverOptions): Promise<Discovery> {
       add(abs, 'project', path.dirname(abs));
       continue;
     }
-    for (const f of await walk(abs, { followSymlinks: opts.followSymlinks, maxDepth: 12, pluginRoots })) {
+    for (const f of await walk(abs, { followSymlinks: opts.followSymlinks, maxDepth: 24, pluginRoots, state })) {
       add(f, 'project', abs);
     }
   }
@@ -103,7 +106,7 @@ export async function discover(opts: DiscoverOptions): Promise<Discovery> {
     }
     for (const d of [...userDirs(home), ...(await claudePluginDirs(home))]) {
       if (!(await isDir(d))) continue;
-      for (const f of await walk(d, { followSymlinks: true, maxDepth: 8, pluginRoots })) add(f, 'user', home);
+      for (const f of await walk(d, { followSymlinks: true, maxDepth: 12, pluginRoots, state })) add(f, 'user', home);
     }
   }
 
@@ -125,7 +128,7 @@ export async function discover(opts: DiscoverOptions): Promise<Discovery> {
   // Executables and binaries bundled inside skills.
   const seen = new Set(files.map((f) => f.path));
   for (const [root, info] of skillRoots) {
-    for (const abs of await walk(root, { followSymlinks: opts.followSymlinks, maxDepth: 4, all: true })) {
+    for (const abs of await walk(root, { followSymlinks: opts.followSymlinks, maxDepth: 10, all: true, state })) {
       if (seen.has(abs)) continue;
       const ext = path.extname(abs).toLowerCase();
       let kind: FileKind | undefined;
@@ -149,7 +152,8 @@ export async function discover(opts: DiscoverOptions): Promise<Discovery> {
     servers.push(...extractServers(file));
     hooks.push(...extractHooks(file));
   }
-  return { files, servers, hooks, errors };
+  if (state.truncated) errors.push('File limit reached: some directories were not scanned. Scan a narrower path.');
+  return { files, servers, hooks, errors, truncated: state.truncated };
 }
 
 /* ------------------------------------------------------------------------------------------ */
@@ -314,8 +318,8 @@ async function load(cand: Candidate, kind: FileKind, agent: Agent, home: string,
       const st = await fs.stat(cand.abs);
       const limit = isClaudeJson ? MAX_CLAUDE_JSON_BYTES : MAX_FILE_BYTES;
       if (st.size > limit) {
-        errors.push(`Skipped ${displayPath}: larger than ${Math.round(limit / 1024 / 1024)} MB`);
-        return undefined;
+        // Not silently dropped: BK207 reports it, so padding a file cannot hide its contents.
+        return { path: cand.abs, displayPath, kind, agent, scope: cand.scope, content: '', rawScan: false, tooLarge: st.size };
       }
       content = await fs.readFile(cand.abs, 'utf8');
     } catch (e) {
@@ -354,12 +358,23 @@ interface WalkOptions {
   all?: boolean;
   pluginRoots?: Set<string>;
   maxFiles?: number;
+  /** Set to true when maxFiles was hit. */
+  state?: { truncated: boolean };
+}
+
+const AGENT_DIRS = new Set(['.claude', '.codex', '.cursor', '.gemini', '.agents', '.windsurf', '.claude-plugin', 'skills', 'plugins']);
+
+function shouldSkipDir(name: string, parent: string, insideSkill: boolean): boolean {
+  if (name === '.git') return true;
+  if (insideSkill) return false;
+  if (name === 'node_modules') return true;
+  return SKIP_DIRS.has(name) && !insideAgentDir(parent);
 }
 
 async function walk(root: string, opts: WalkOptions): Promise<string[]> {
   const out: string[] = [];
   const visited = new Set<string>();
-  const maxFiles = opts.maxFiles ?? 50_000;
+  const maxFiles = opts.maxFiles ?? 200_000;
 
   const visit = async (dir: string, depth: number): Promise<void> => {
     if (depth > opts.maxDepth || out.length >= maxFiles) return;
@@ -393,18 +408,28 @@ async function walk(root: string, opts: WalkOptions): Promise<string[]> {
       }
       if (isDirectory) {
         if (entry.name === '.claude-plugin') opts.pluginRoots?.add(dir);
-        if (SKIP_DIRS.has(entry.name)) continue;
+        // Inside skills and agent directories every folder may hold executable content, so only
+        // VCS metadata and dependency trees are skipped there. Names like "coverage" or "target"
+        // must not hide a skill.
+        if (shouldSkipDir(entry.name, dir, opts.all === true)) continue;
         if (entry.name === 'worktrees' && path.basename(dir) === '.claude') continue; // agent-created copies
         await visit(abs, depth + 1);
       } else if (isRegular && (opts.all || INTERESTING_NAME.test(entry.name))) {
         out.push(abs);
-        if (out.length >= maxFiles) return;
+        if (out.length >= maxFiles) {
+          if (opts.state) opts.state.truncated = true;
+          return;
+        }
       }
     }
   };
 
   await visit(root, 0);
   return out;
+}
+
+function insideAgentDir(dir: string): boolean {
+  return dir.split(path.sep).some((seg) => AGENT_DIRS.has(seg));
 }
 
 async function isFile(p: string): Promise<boolean> {
@@ -484,7 +509,8 @@ export function extractServers(file: SourceFile): McpServer[] {
         raw: def,
         project,
         line: lineOf(file.content, [`"${name}"`, `[mcp_servers.${name}]`, `[mcp_servers."${name}"]`, name], 1, from),
-        disabled: def.disabled === true || def.enabled === false,
+        // Only clients that document these keys honour them; elsewhere the server still starts.
+        disabled: (['cline', 'windsurf'].includes(file.agent) && def.disabled === true) || (file.agent === 'codex' && def.enabled === false),
       });
     }
   }

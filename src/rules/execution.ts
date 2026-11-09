@@ -7,12 +7,12 @@ const SHELLS = '(?:sudo\\s+(?:-\\S+\\s+)*)?(?:ba|z|da|k|fi|c|tc)?sh';
 const INTERPRETERS = '(?:sudo\\s+)?(?:python[0-9.]*|node|perl|ruby|php|deno\\s+run|bun|osascript|pwsh|powershell)';
 
 const RCE_PATTERNS: RegExp[] = [
-  new RegExp(`\\b(curl|wget)\\s+[^\\s|;&][^\\n|;&]*\\|\\s*(${SHELLS}|${INTERPRETERS})\\b`, 'i'),
+  new RegExp(`\\b(curl|wget)\\s+[^\\s|;&][^\\n|;&]{0,300}\\|\\s*(${SHELLS}|${INTERPRETERS})\\b`, 'i'),
   new RegExp(`\\b(${SHELLS}|${INTERPRETERS}|source|\\.)\\s+(-c\\s+)?["']?\\s*<\\(\\s*(curl|wget)\\b`, 'i'),
   /\beval\s+["']?\$\(\s*(curl|wget)\b/i,
   /\b(sh|bash|zsh)\s+-c\s+["']?\$\(\s*(curl|wget)\b/i,
-  /\b(iex|invoke-expression)\b[^\n]*\b(iwr|irm|invoke-webrequest|invoke-restmethod|downloadstring|net\.webclient)\b/i,
-  /\b(iwr|irm|invoke-webrequest|invoke-restmethod)\b[^\n]*\|\s*(iex|invoke-expression)\b/i,
+  /\b(iex|invoke-expression)\b[^\n]{0,300}\b(iwr|irm|invoke-webrequest|invoke-restmethod|downloadstring|net\.webclient)\b/i,
+  /\b(iwr|irm|invoke-webrequest|invoke-restmethod)\b[^\n]{0,300}\|\s*(iex|invoke-expression)\b/i,
   /\bpython[0-9.]*\s+-c\s+["'][^"'\n]*\burllib\.request\.urlopen\([^)]*\)\.read\(\)[^"'\n]*\bexec\b/i,
 ];
 
@@ -54,12 +54,12 @@ export const remoteCodeExecution: Rule = {
 };
 
 const OBFUSCATION_PATTERNS: RegExp[] = [
-  new RegExp(`\\bbase64\\s+(-d|--decode|-D)\\b[^\\n]*\\|\\s*(${SHELLS}|${INTERPRETERS})\\b`, 'i'),
+  new RegExp(`\\bbase64\\s+(-d|--decode|-D)\\b[^\\n]{0,300}\\|\\s*(${SHELLS}|${INTERPRETERS})\\b`, 'i'),
   /\b(echo|printf)\s+['"]?[A-Za-z0-9+/]{40,}={0,2}['"]?\s*\|\s*base64\s+(-d|--decode|-D)/i,
   /\beval\s*\(\s*(atob|Buffer\.from|unescape|decodeURIComponent)\s*\(/i,
   /\b(exec|eval)\s*\(\s*(base64\.b64decode|codecs\.decode|bytes\.fromhex|zlib\.decompress|marshal\.loads|__import__\(['"]base64)/i,
   /\bnew\s+Function\s*\(\s*(atob|Buffer\.from)\s*\(/i,
-  /\b(xxd\s+-r\s+-p|openssl\s+(base64|enc)\s+-d)\b[^\n]*\|\s*(ba|z)?sh\b/i,
+  /\b(xxd\s+-r\s+-p|openssl\s+(base64|enc)\s+-d)\b[^\n]{0,300}\|\s*(ba|z)?sh\b/i,
   /\\x[0-9a-f]{2}(\\x[0-9a-f]{2}){30,}/i,
 ];
 
@@ -118,18 +118,18 @@ export const obfuscatedPayload: Rule = {
 
 const DESTRUCTIVE: Array<[RegExp, string, Severity]> = [
   [
-    /\brm\s+(?:-{1,2}[\w-]+\s+)*(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(?:\s+-{1,2}[\w-]+)*\s+["']?(\/\*?|~\/?\*?|\$\{?HOME\}?\/?\*?)["']?(?=\s|$|[;&|)`"'])/,
+    /\brm\s+(?:--?[^\s-][\w-]*\s+){0,20}?(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(?:\s+--?[^\s-][\w-]*){0,20}\s+["']?(\/\*?|~\/?\*?|\$\{?HOME\}?\/?\*?)["']?(?=\s|$|[;&|)`"'])/,
     'recursively deletes the root or home directory',
     'high',
   ],
-  [/\brm\b[^\n]*--no-preserve-root/, 'deletes with --no-preserve-root', 'high'],
+  [/\brm\b[^\n]{0,300}--no-preserve-root/, 'deletes with --no-preserve-root', 'high'],
   [/\bmkfs(\.\w+)?\s+\/dev\//, 'formats a disk', 'high'],
-  [/\bdd\s+[^\n]*\bof=\/dev\/(sd|disk|nvme|hd|mmcblk)/, 'overwrites a raw disk device', 'high'],
+  [/\bdd\s+[^\n]{0,300}\bof=\/dev\/(sd|disk|nvme|hd|mmcblk)/, 'overwrites a raw disk device', 'high'],
   [/:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, 'fork bomb', 'high'],
   [/\bdiskutil\s+(eraseDisk|zeroDisk|secureErase|eraseVolume)\b/, 'erases a disk', 'high'],
   [/\bchmod\s+(-R\s+)?0?777\s+(\/|~|\$HOME)(\s|$)/, 'makes the root or home directory world-writable', 'medium'],
-  [/\bRemove-Item\b[^\n]*-Recurse[^\n]*(C:\\\s|C:\\$|\$env:USERPROFILE|\$HOME|~)/i, 'recursively deletes the system drive or user profile', 'high'],
-  [/\bgit\s+push\b[^\n]*\s(--force|-f)(\s|$)/, 'force-pushes, rewriting remote history', 'low'],
+  [/\bRemove-Item\b[^\n]{0,300}-Recurse[^\n]{0,300}(C:\\\s|C:\\$|\$env:USERPROFILE|\$HOME|~)/i, 'recursively deletes the system drive or user profile', 'high'],
+  [/\bgit\s+push\b[^\n]{0,300}\s(--force|-f)(\s|$)/, 'force-pushes, rewriting remote history', 'low'],
   [/\bgit\s+reset\s+--hard\s+origin/, 'discards local work with git reset --hard', 'low'],
   [/\b(DROP\s+(DATABASE|SCHEMA)|TRUNCATE\s+TABLE)\b/, 'drops or truncates database objects', 'medium'],
 ];

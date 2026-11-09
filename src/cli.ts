@@ -43,7 +43,7 @@ Options
   -h, --help               Show this help
       --version            Show version
 
-Exit codes: 0 clean · 1 findings at or above --fail-on · 2 usage or runtime error
+Exit codes: 0 clean · 1 findings at or above --fail-on · 2 usage error, runtime error or incomplete scan
 Docs: https://github.com/YusufSizmaz/bekci
 `;
 
@@ -127,10 +127,20 @@ async function main(argv: string[]): Promise<number> {
     }
 
     let config: BekciConfig = {};
-    if (!flags['no-config'] && !hasRemote) {
+    if (!flags['no-config'] && !hasRemote && !flags['user-only']) {
       const dir = paths[0] ?? process.cwd();
       const st = await fs.stat(dir).catch(() => undefined);
-      config = (await loadConfig(st?.isFile() ? path.dirname(dir) : dir)).config;
+      const loaded = await loadConfig(st?.isFile() ? path.dirname(dir) : dir);
+      config = loaded.config;
+      if (loaded.path && flags.format === 'pretty' && !flags.output) {
+        // The config lives in the scanned directory, so whoever wrote it can hide findings. Say so.
+        const parts = [
+          config.ignore?.length ? `ignores ${config.ignore.join(', ')}` : '',
+          config.ignorePaths?.length ? `${config.ignorePaths.length} ignored path pattern(s)` : '',
+          config.failOn ? `fail-on ${config.failOn}` : '',
+        ].filter(Boolean);
+        process.stderr.write(c.dim(`  Using ${path.relative(process.cwd(), loaded.path) || loaded.path}${parts.length ? `: ${parts.join(', ')}` : ''} (--no-config to skip)\n`));
+      }
     }
 
     const minSeverity = pickSeverity(flags['min-severity'], config.minSeverity, 'low', '--min-severity');
@@ -148,11 +158,7 @@ async function main(argv: string[]): Promise<number> {
       ignorePaths: [...flags['ignore-path'], ...(config.ignorePaths ?? [])],
       minSeverity,
     });
-    if (hasRemote) {
-      // Show paths relative to the repository, not the temp directory.
-      for (const f of result.findings) f.file = f.file.replace(/^.*?bekci-[^/\\]+[/\\]repo[/\\]/, '');
-      result.roots = remotes.map((r) => r.remote?.label ?? r.arg);
-    }
+    if (hasRemote) result.roots = remotes.map((r) => r.remote?.label ?? r.arg);
 
     const rendered = render(result, flags.format, flags.verbose, paths[0]);
     if (flags.output) {
@@ -162,6 +168,7 @@ async function main(argv: string[]): Promise<number> {
       process.stdout.write(rendered.endsWith('\n') ? rendered : rendered + '\n');
     }
 
+    if (result.incomplete && failOnRaw !== 'none') return 2;
     if (failOnRaw === 'none') return 0;
     const threshold = severityRank(failOnRaw as Severity);
     return result.findings.some((f) => severityRank(f.severity) >= threshold) ? 1 : 0;
@@ -175,7 +182,7 @@ function render(result: ScanOutput, format: string, verbose: boolean, root?: str
     case 'json':
       return JSON.stringify(result, null, 2);
     case 'sarif':
-      return renderSarif(result, root && !root.includes('bekci-') ? root : process.cwd());
+      return renderSarif(result, root ?? process.cwd());
     case 'markdown':
     case 'md':
       return renderMarkdown(result);
