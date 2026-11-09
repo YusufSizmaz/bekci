@@ -6,6 +6,10 @@ export function setColor(on: boolean): void {
   enabled = on;
 }
 
+export function colorEnabled(): boolean {
+  return enabled;
+}
+
 export function colorSupported(stream: NodeJS.WriteStream = process.stdout): boolean {
   if ('NO_COLOR' in process.env) return false;
   if ('FORCE_COLOR' in process.env) return process.env.FORCE_COLOR !== '0';

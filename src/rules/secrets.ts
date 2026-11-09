@@ -29,17 +29,23 @@ export const SECRET_PATTERNS: Array<[RegExp, string]> = [
   [/\bsntrys_[A-Za-z0-9_=+/-]{60,}/g, 'Sentry token'],
   [/https:\/\/hooks\.slack\.com\/services\/T[A-Z0-9]+\/B[A-Z0-9]+\/[A-Za-z0-9]{20,}/g, 'Slack webhook URL'],
   [/https:\/\/discord(app)?\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]{50,}/g, 'Discord webhook URL'],
+  [/\bshp(at|ca|pa|ss)_[a-fA-F0-9]{32}\b/g, 'Shopify access token'],
+  [/\bATATT3[A-Za-z0-9_=-]{150,}/g, 'Atlassian API token'],
+  [/\bdp\.(pt|st|sa|ct|scim|audit)\.[A-Za-z0-9]{40,}\b/g, 'Doppler token'],
+  [/\bPMAK-[a-f0-9]{24}-[a-f0-9]{34}\b/g, 'Postman API key'],
   [/-----BEGIN ((RSA|DSA|EC|OPENSSH|PGP|ENCRYPTED) )?PRIVATE KEY( BLOCK)?-----(\\[rn]|\s)+[A-Za-z0-9+/=]{40,}/g, 'private key'],
   [/\b(postgres(ql)?|mysql|mongodb(\+srv)?|redis|amqp):\/\/[^\s:@/'"]+:[^\s@/'"]{6,}@[^\s'"]+/g, 'database URL with password'],
 ];
 
-const PLACEHOLDER = /x{4,}|X{4,}|\*{3,}|\.{3}|…|<[^>]*>|\{\{|\$\{|your[_-]?|example|EXAMPLE|placeholder|changeme|dummy|sample|redacted|REDACTED|test[_-]?key|0{8,}|1234567/;
+const PLACEHOLDER =
+  /x{4,}|X{4,}|\*{3,}|\.{3}|\u2026|<[^>]*>|\{\{|\$\{|your[_-]?|example|EXAMPLE|placeholder|changeme|dummy|sample|redacted|REDACTED|test[_-]?key|0{8,}|1234567/;
 
 function isPlaceholder(s: string): boolean {
   return PLACEHOLDER.test(s);
 }
 
-const INLINE_CREDENTIAL = /\b((?:bearer|token|api[_-]?key|apikey|secret|password|passwd|pwd|authorization)["']?\s*[:=]?\s*["']?(?:bearer\s+)?)([A-Za-z0-9_\-./+=]{12,})/gi;
+const INLINE_CREDENTIAL =
+  /\b((?:bearer|token|api[_-]?key|apikey|secret|password|passwd|pwd|authorization)["']?\s*[:=]?\s*["']?(?:bearer\s+)?)([A-Za-z0-9_\-./+=]{12,})/gi;
 
 /** Masks every recognisable secret in a human-readable string (messages, evidence). */
 export function redactSecrets(text: string): string {
@@ -91,12 +97,13 @@ export const hardcodedSecret: Rule = {
     // Files that are not raw-scanned (e.g. ~/.claude.json) still have their MCP servers checked.
     for (const s of ctx.servers) {
       if (s.file.rawScan) continue;
-      scan(s.file, [s.command ?? '', ...s.args, ...Object.values(s.env), ...Object.values(s.headers), s.url ?? ''].join('\n'), s.line);
+      scan(s.file, [s.commandLine, ...Object.values(s.env), ...Object.values(s.headers), s.url ?? ''].join('\n'), s.line);
     }
   },
 };
 
-const SENSITIVE_KEY = /(^|[_-])(API[_-]?KEY|APIKEY|TOKEN|ACCESS[_-]?TOKEN|AUTH[_-]?TOKEN|SECRET|CLIENT[_-]?SECRET|PASSWORD|PASSWD|PWD|PAT|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|CREDENTIALS?|COOKIE|SESSION)($|[_-])/i;
+const SENSITIVE_KEY =
+  /(^|[_-])(API[_-]?KEY|APIKEY|TOKEN|ACCESS[_-]?TOKEN|AUTH[_-]?TOKEN|SECRET|CLIENT[_-]?SECRET|PASSWORD|PASSWD|PWD|PAT|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|CREDENTIALS?|COOKIE|SESSION)($|[_-])/i;
 const SENSITIVE_HEADER = /^(authorization|x-api-key|api-key|x-auth-token|cookie|x-access-token|private-token)$/i;
 const REFERENCE = /^\s*(\$\{?[A-Za-z_]|\$env:|%[A-Za-z_]+%|\{\{|op:\/\/|env:|secret:|vault:|keychain:|bws:|awssm:|gcpsm:|\$\(|`)/;
 
@@ -117,7 +124,7 @@ export const plaintextCredential: Rule = {
   category: 'secrets',
   description:
     'An MCP server or agent settings file sets a credential-looking environment variable or HTTP header ' +
-    '(`*_API_KEY`, `*_TOKEN`, `Authorization`, …) to a literal value, or embeds credentials in a server URL. ' +
+    '(`*_API_KEY`, `*_TOKEN`, `Authorization`, \u2026) to a literal value, or embeds credentials in a server URL. ' +
     'Complements BK011 for tokens with no recognisable format.',
   remediation:
     'Move the value out of the config file: reference an environment variable (`${GITHUB_TOKEN}`), use the ' +
@@ -143,7 +150,11 @@ export const plaintextCredential: Rule = {
         const query = /[?&](api[_-]?key|apikey|token|access[_-]?token|key|secret|auth)=([^&#\s]{8,})/i.exec(s.url);
         const leaked = userinfo?.[1] ?? query?.[2];
         if (leaked && literalCredential(leaked)) {
-          report({ file: s.file, line: s.line, message: `MCP server "${s.name}" embeds a credential in its URL: ${redact(leaked)}` });
+          report({
+            file: s.file,
+            line: s.line,
+            message: `MCP server "${s.name}" embeds a credential in its URL: ${redact(leaked)}`,
+          });
         }
       }
     }

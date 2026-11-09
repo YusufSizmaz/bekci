@@ -10,16 +10,7 @@ export function isSeverity(s: string): s is Severity {
 }
 
 export type Agent =
-  | 'claude-code'
-  | 'claude-desktop'
-  | 'cursor'
-  | 'codex'
-  | 'gemini-cli'
-  | 'windsurf'
-  | 'vscode'
-  | 'copilot'
-  | 'cline'
-  | 'generic';
+  'claude-code' | 'claude-desktop' | 'cursor' | 'codex' | 'gemini-cli' | 'windsurf' | 'vscode' | 'copilot' | 'cline' | 'generic';
 
 export const AGENT_LABELS: Record<Agent, string> = {
   'claude-code': 'Claude Code',
@@ -31,7 +22,7 @@ export const AGENT_LABELS: Record<Agent, string> = {
   vscode: 'VS Code',
   copilot: 'GitHub Copilot',
   cline: 'Cline',
-  generic: 'Agent Skills',
+  generic: 'Shared (AGENTS.md / Agent Skills)',
 };
 
 /**
@@ -39,13 +30,14 @@ export const AGENT_LABELS: Record<Agent, string> = {
  * - skill:        SKILL.md files
  * - subagent:     sub-agent definitions (.claude/agents/*.md)
  * - command:      slash commands / prompt files
+ * - reference:    other text files inside a skill or imported by an instruction file
  * - script:       executable files shipped inside a skill
  * - config:       JSON/TOML agent configuration (MCP servers, permissions, hooks)
  * - binary:       opaque binaries shipped inside a skill (content not loaded)
  */
-export type FileKind = 'instructions' | 'skill' | 'subagent' | 'command' | 'script' | 'config' | 'binary';
+export type FileKind = 'instructions' | 'skill' | 'subagent' | 'command' | 'reference' | 'script' | 'config' | 'binary';
 
-export const MARKDOWN_KINDS: ReadonlySet<FileKind> = new Set(['instructions', 'skill', 'subagent', 'command']);
+export const MARKDOWN_KINDS: ReadonlySet<FileKind> = new Set(['instructions', 'skill', 'subagent', 'command', 'reference']);
 
 export type Scope = 'user' | 'project';
 
@@ -70,6 +62,13 @@ export interface SourceFile {
   rawScan: boolean;
   /** Size in bytes when the file exceeded the scan limit and its content was not read. */
   tooLarge?: number;
+  /**
+   * Third-party content: inside a skill or plugin directory. Such files may not silence their
+   * own findings with inline comments.
+   */
+  vendored?: boolean;
+  /** How many `@import` hops led to this file (0 or undefined for files found directly). */
+  importDepth?: number;
 }
 
 export interface McpServer {
@@ -84,6 +83,10 @@ export interface McpServer {
   url?: string;
   headers: Record<string, string>;
   raw: Record<string, unknown>;
+  /** Shell wrapper the server is launched through (`cmd /c`, `sh -c`), if any. */
+  launcher?: string;
+  /** The command line exactly as configured, before unwrapping (used for content rules). */
+  commandLine: string;
   /** Project path for per-project servers stored in a user-level file (~/.claude.json). */
   project?: string;
   /** 1-based line of the server definition inside its config file. */
@@ -99,13 +102,7 @@ export interface HookCommand {
 }
 
 export type Category =
-  | 'prompt-injection'
-  | 'code-execution'
-  | 'exfiltration'
-  | 'secrets'
-  | 'permissions'
-  | 'supply-chain'
-  | 'toxic-flow';
+  'prompt-injection' | 'code-execution' | 'exfiltration' | 'secrets' | 'permissions' | 'supply-chain' | 'toxic-flow';
 
 export interface RuleMeta {
   id: string;

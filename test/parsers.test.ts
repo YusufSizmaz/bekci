@@ -56,7 +56,7 @@ name = "two"
     expect(doc.a).toEqual({ b: { c: true } });
     expect(doc.s).toBe('line1\nline2joined');
     expect(doc.lit).toBe('raw \\n');
-    expect(doc.esc).toBe('tab\there é');
+    expect(doc.esc).toBe('tab\there \u00E9');
     expect(doc.nums).toEqual([1, -2.5, 1000, 31]);
     expect(doc.date).toBe('1979-05-27T07:32:00Z');
     expect(doc.items).toEqual([{ name: 'one' }, { name: 'two' }]);

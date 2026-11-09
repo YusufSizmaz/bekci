@@ -16,11 +16,17 @@ const CAPABILITIES: Array<[RegExp, Leg[]]> = [
   [/\b(jira|linear|asana|trello|clickup|zendesk|intercom|atlassian|confluence)\b/, ['private', 'untrusted', 'exfil']],
   [/\b(notion|gdrive|google-drive|drive|dropbox|onedrive|sharepoint|box|obsidian|evernote)\b/, ['private', 'untrusted']],
   [/\b(filesystem|file-system|desktop-commander)\b/, ['private']],
-  [/\b(postgres|postgresql|mysql|sqlite|supabase|mongo|mongodb|redis|neon|database|snowflake|bigquery|clickhouse|dynamodb|firestore|prisma)\b/, ['private']],
+  [
+    /\b(postgres|postgresql|mysql|sqlite|supabase|mongo|mongodb|redis|neon|database|snowflake|bigquery|clickhouse|dynamodb|firestore|prisma)\b/,
+    ['private'],
+  ],
   [/\b(1password|bitwarden|vault|keychain|secrets?)\b/, ['private']],
   [/\b(stripe|shopify|salesforce|hubspot|quickbooks|xero|sentry|datadog)\b/, ['private']],
   [/\b(shell|terminal|ssh|desktop-commander|computer-use|applescript|iterm)\b/, ['private', 'exfil']],
-  [/\b(fetch|browser|puppeteer|playwright|chrome|chromium|firecrawl|brightdata|scrape|scraper|crawl|crawler|browserbase|web)\b/, ['untrusted', 'exfil']],
+  [
+    /\b(fetch|browser|puppeteer|playwright|chrome|chromium|firecrawl|brightdata|scrape|scraper|crawl|crawler|browserbase|web)\b/,
+    ['untrusted', 'exfil'],
+  ],
   [/\b(search|brave|tavily|exa|perplexity|serp|serper|kagi|duckduckgo|bing)\b/, ['untrusted']],
   [/\b(twitter|x-mcp|reddit|youtube|hackernews|rss|news|arxiv)\b/, ['untrusted']],
   [/\b(webhook|http-request|requests|curl|api-gateway|zapier|n8n)\b/, ['exfil']],
@@ -81,7 +87,14 @@ export const lethalTrifecta: Rule = {
         for (const s of servers) for (const leg of capabilities(s)) providers[leg].push(s);
         if (!providers.private.length || !providers.untrusted.length || !providers.exfil.length) continue;
 
-        const key = (['private', 'untrusted', 'exfil'] as Leg[]).map((l) => providers[l].map((s) => s.name).sort().join(',')).join('|');
+        const key = (['private', 'untrusted', 'exfil'] as Leg[])
+          .map((l) =>
+            providers[l]
+              .map((s) => s.name)
+              .sort()
+              .join(','),
+          )
+          .join('|');
         if (reported.has(key)) continue;
         reported.add(key);
 

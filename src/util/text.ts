@@ -34,7 +34,10 @@ export function sanitize(s: string): string {
   return s
     .replace(/[\r\n\t]+/g, ' ')
     .replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, (ch) => `\\x${ch.charCodeAt(0).toString(16).padStart(2, '0')}`)
-    .replace(/[\u202A-\u202E\u2066-\u2069\u200B-\u200F\u2060\uFEFF]/g, (ch) => `<U+${ch.charCodeAt(0).toString(16).toUpperCase()}>`)
+    .replace(
+      /[\u202A-\u202E\u2066-\u2069\u200B-\u200F\u2060\uFEFF]/g,
+      (ch) => `<U+${ch.charCodeAt(0).toString(16).toUpperCase()}>`,
+    )
     .replace(/[\u{E0000}-\u{E007F}]/gu, '');
 }
 
@@ -60,7 +63,7 @@ export function lineText(text: string, line: number): string {
 /** A compact, single-line excerpt centred on a match. */
 export function excerpt(s: string, max = 100): string {
   const flat = s.replace(/\s+/g, ' ').trim();
-  return flat.length > max ? flat.slice(0, max - 1) + '…' : flat;
+  return flat.length > max ? flat.slice(0, max - 1) + '\u2026' : flat;
 }
 
 /** Excerpt of the line around `index`, keeping the match visible. */
@@ -74,7 +77,7 @@ export function excerptAround(text: string, index: number, length: number, max =
   const start = Math.max(0, Math.min(rel - 20, line.length - max));
   const slice = line.slice(start, start + max);
   void length;
-  return (start > 0 ? '…' : '') + excerpt(slice, max) + (start + max < line.length ? '…' : '');
+  return (start > 0 ? '\u2026' : '') + excerpt(slice, max) + (start + max < line.length ? '\u2026' : '');
 }
 
 /** Masks a secret, keeping just enough to recognise it. */

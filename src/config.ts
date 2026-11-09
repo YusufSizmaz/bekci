@@ -35,19 +35,23 @@ function validate(raw: Record<string, unknown>, file: string): BekciConfig {
     throw new Error(`${file}: ${msg}`);
   };
   if (raw.ignore !== undefined) {
-    if (!Array.isArray(raw.ignore) || raw.ignore.some((x) => typeof x !== 'string')) fail('"ignore" must be an array of rule IDs');
+    if (!Array.isArray(raw.ignore) || raw.ignore.some((x) => typeof x !== 'string'))
+      fail('"ignore" must be an array of rule IDs');
     out.ignore = raw.ignore as string[];
   }
   if (raw.ignorePaths !== undefined) {
-    if (!Array.isArray(raw.ignorePaths) || raw.ignorePaths.some((x) => typeof x !== 'string')) fail('"ignorePaths" must be an array of globs');
+    if (!Array.isArray(raw.ignorePaths) || raw.ignorePaths.some((x) => typeof x !== 'string'))
+      fail('"ignorePaths" must be an array of globs');
     out.ignorePaths = raw.ignorePaths as string[];
   }
   if (raw.minSeverity !== undefined) {
-    if (typeof raw.minSeverity !== 'string' || !isSeverity(raw.minSeverity)) fail('"minSeverity" must be info|low|medium|high|critical');
+    if (typeof raw.minSeverity !== 'string' || !isSeverity(raw.minSeverity))
+      fail('"minSeverity" must be info|low|medium|high|critical');
     out.minSeverity = raw.minSeverity as Severity;
   }
   if (raw.failOn !== undefined) {
-    if (typeof raw.failOn !== 'string' || !(raw.failOn === 'none' || isSeverity(raw.failOn))) fail('"failOn" must be a severity or "none"');
+    if (typeof raw.failOn !== 'string' || !(raw.failOn === 'none' || isSeverity(raw.failOn)))
+      fail('"failOn" must be a severity or "none"');
     out.failOn = raw.failOn as Severity | 'none';
   }
   return out;

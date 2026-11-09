@@ -19,6 +19,7 @@ import {
   privilegedContainer,
   typosquat,
   unpinnedPackage,
+  unparseableConfig,
   unscannableFile,
 } from './supply-chain.js';
 import { lethalTrifecta } from './toxic-flow.js';
@@ -50,6 +51,7 @@ export const RULES: readonly Rule[] = [
   typosquat,
   opaqueBinary,
   unscannableFile,
+  unparseableConfig,
   lethalTrifecta,
 ];
 

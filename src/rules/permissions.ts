@@ -37,7 +37,11 @@ export const permissionBypass: Rule = {
     for (const { file, data } of claudeSettings(ctx.files)) {
       const perms = isObj(data.permissions) ? data.permissions : {};
       if (perms.defaultMode === 'bypassPermissions') {
-        report({ file, line: lineOf(file.content, ['bypassPermissions']), message: 'Claude Code defaultMode is "bypassPermissions": every tool call runs without approval' });
+        report({
+          file,
+          line: lineOf(file.content, ['bypassPermissions']),
+          message: 'Claude Code defaultMode is "bypassPermissions": every tool call runs without approval',
+        });
       }
       if (data.skipDangerousModePermissionPrompt === true) {
         report({
@@ -61,16 +65,25 @@ export const permissionBypass: Rule = {
         const full = p.sandbox_mode === 'danger-full-access';
         const needle = name ? `[profiles.${name}]` : full ? 'danger-full-access' : 'approval_policy';
         if (never && full) {
-          report({ file, line: lineOf(file.content, [needle, 'danger-full-access']), message: `${label} runs commands with no approval and no sandbox (approval_policy = "never", sandbox_mode = "danger-full-access")` });
+          report({
+            file,
+            line: lineOf(file.content, [needle, 'danger-full-access']),
+            message: `${label} runs commands with no approval and no sandbox (approval_policy = "never", sandbox_mode = "danger-full-access")`,
+          });
         } else if (full) {
-          report({ file, line: lineOf(file.content, [needle, 'danger-full-access']), severity: 'medium', message: `${label} disables the sandbox (sandbox_mode = "danger-full-access")` });
+          report({
+            file,
+            line: lineOf(file.content, [needle, 'danger-full-access']),
+            severity: 'medium',
+            message: `${label} disables the sandbox (sandbox_mode = "danger-full-access")`,
+          });
         }
       }
     }
   },
 };
 
-const UNRESTRICTED_BASH = /^(Bash|Shell|run_shell_command|Bash\(\s*\)|Bash\(\s*\*\s*\)|Bash\(\s*\*?\s*:\s*\*\s*\))$/;
+const UNRESTRICTED_BASH = /^(Bash|Shell|run_shell_command)(\(\s*\**\s*(:\s*\**\s*)?\))?$/i;
 
 export const unrestrictedShell: Rule = {
   id: 'BK102',
@@ -86,7 +99,11 @@ export const unrestrictedShell: Rule = {
     for (const { file, data } of claudeSettings(ctx.files)) {
       for (const entry of allowList(data)) {
         if (UNRESTRICTED_BASH.test(entry.trim())) {
-          report({ file, line: lineOf(file.content, [`"${entry}"`]), message: `Allowlist entry "${entry}" pre-approves every shell command` });
+          report({
+            file,
+            line: lineOf(file.content, [`"${entry}"`]),
+            message: `Allowlist entry "${entry}" pre-approves every shell command`,
+          });
         }
       }
     }
@@ -138,7 +155,21 @@ const RISKY_COMMANDS: Record<string, string> = {
 };
 
 /** Risky even with a fixed prefix, because appended arguments change what they do. */
-const ALWAYS_RISKY = new Set(['curl', 'wget', 'nc', 'ncat', 'socat', 'ssh', 'scp', 'rsync', 'sudo', 'su', 'eval', 'exec', 'security']);
+const ALWAYS_RISKY = new Set([
+  'curl',
+  'wget',
+  'nc',
+  'ncat',
+  'socat',
+  'ssh',
+  'scp',
+  'rsync',
+  'sudo',
+  'su',
+  'eval',
+  'exec',
+  'security',
+]);
 
 export const riskyAllowRule: Rule = {
   id: 'BK103',
@@ -158,7 +189,10 @@ export const riskyAllowRule: Rule = {
         if (!m) continue;
         const spec = m[1]!.trim();
         if (!/[*]/.test(spec) || UNRESTRICTED_BASH.test(entry.trim())) continue;
-        const words = spec.replace(/:\*$/, ' *').split(/[\s:]+/).filter(Boolean);
+        const words = spec
+          .replace(/:\*$/, ' *')
+          .split(/[\s:]+/)
+          .filter(Boolean);
         const two = words.slice(0, 2).join(' ');
         const one = words[0] ?? '';
         // `npx tsc *` is scoped to one tool; `npx *`, `python3 -c *` and `curl <anything>` are not.
@@ -194,13 +228,22 @@ export const autoApprovedMcp: Rule = {
     }
     for (const s of ctx.servers) {
       if (s.raw.trust === true) {
-        report({ file: s.file, line: s.line, severity: 'high', message: `MCP server "${s.name}" has trust: true, bypassing all tool-call confirmations` });
+        report({
+          file: s.file,
+          line: s.line,
+          severity: 'high',
+          message: `MCP server "${s.name}" has trust: true, bypassing all tool-call confirmations`,
+        });
       }
       for (const key of ['alwaysAllow', 'autoApprove']) {
         const v = s.raw[key];
         if ((Array.isArray(v) && v.length > 0) || v === true) {
           const tools = Array.isArray(v) ? v.map(String) : ['all tools'];
-          report({ file: s.file, line: s.line, message: `MCP server "${s.name}" auto-approves ${tools.length > 3 ? `${tools.length} tools` : tools.join(', ')} (${key})` });
+          report({
+            file: s.file,
+            line: s.line,
+            message: `MCP server "${s.name}" auto-approves ${tools.length > 3 ? `${tools.length} tools` : tools.join(', ')} (${key})`,
+          });
         }
       }
     }
@@ -279,7 +322,8 @@ export const greedySkillTrigger: Rule = {
       const desc = fm?.fields.description;
       if (typeof desc !== 'string') continue;
       const m = GREEDY.map((re) => re.exec(desc)).find(Boolean);
-      if (m) report({ file, line: fm!.lines.description, message: `Description asks to be used broadly: "${excerpt(m[0], 70)}"` });
+      if (m)
+        report({ file, line: fm!.lines.description, message: `Description asks to be used broadly: "${excerpt(m[0], 70)}"` });
     }
   },
 };

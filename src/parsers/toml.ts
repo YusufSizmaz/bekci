@@ -5,17 +5,19 @@
  * and inline tables.
  */
 export function parseToml(src: string): Record<string, unknown> {
-  return new TomlParser(src.replace(/^﻿/, '')).parse();
+  return new TomlParser(src.replace(/^\uFEFF/, '')).parse();
 }
 
 type Table = Record<string, unknown>;
+
+const newTable = (): Table => Object.create(null) as Table;
 
 const BARE_KEY = /[A-Za-z0-9_-]+/y;
 const SCALAR = /[0-9A-Za-z+\-_.:]+/y;
 
 class TomlParser {
   private i = 0;
-  private readonly root: Table = {};
+  private readonly root: Table = newTable();
   private current: Table = this.root;
 
   constructor(private readonly src: string) {}
@@ -195,14 +197,22 @@ class TomlParser {
     const e = this.src[this.i + 1];
     this.i += 2;
     switch (e) {
-      case 'b': return '\b';
-      case 't': return '\t';
-      case 'n': return '\n';
-      case 'f': return '\f';
-      case 'r': return '\r';
-      case 'e': return '\x1b';
-      case '"': return '"';
-      case '\\': return '\\';
+      case 'b':
+        return '\b';
+      case 't':
+        return '\t';
+      case 'n':
+        return '\n';
+      case 'f':
+        return '\f';
+      case 'r':
+        return '\r';
+      case 'e':
+        return '\x1b';
+      case '"':
+        return '"';
+      case '\\':
+        return '\\';
       case 'u':
       case 'U': {
         const len = e === 'u' ? 4 : 8;
@@ -263,7 +273,7 @@ class TomlParser {
 
   private inlineTable(): Table {
     this.i++;
-    const out: Table = {};
+    const out: Table = newTable();
     this.skipBlank();
     if (this.src[this.i] === '}') {
       this.i++;
@@ -301,7 +311,7 @@ class TomlParser {
       let next = Object.prototype.hasOwnProperty.call(t, part) ? t[part] : undefined;
       if (Array.isArray(next)) next = next[next.length - 1];
       if (next === undefined) {
-        next = {};
+        next = newTable();
         t[part] = next;
       }
       if (typeof next !== 'object' || next === null) this.error(`key '${part}' is not a table`);
@@ -315,7 +325,7 @@ class TomlParser {
     const last = path[path.length - 1]!;
     this.checkKey(last);
     const existing = Object.prototype.hasOwnProperty.call(parent, last) ? parent[last] : undefined;
-    const entry: Table = {};
+    const entry: Table = newTable();
     if (existing === undefined) parent[last] = [entry];
     else if (Array.isArray(existing)) existing.push(entry);
     else this.error(`key '${last}' is not an array of tables`);
@@ -329,8 +339,10 @@ class TomlParser {
     t[key] = value;
   }
 
-  /** Scanned files are attacker-controlled: never let them touch Object.prototype. */
-  private checkKey(key: string): void {
-    if (key === '__proto__' || key === 'constructor' || key === 'prototype') this.error(`forbidden key '${key}'`);
-  }
+  /**
+   * Scanned files are attacker-controlled. Tables have a null prototype, so keys such as
+   * `__proto__` or `constructor` are stored as ordinary data instead of reaching
+   * Object.prototype, and valid files that use them still parse.
+   */
+  private checkKey(_key: string): void {}
 }

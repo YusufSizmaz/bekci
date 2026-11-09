@@ -12,29 +12,45 @@ export interface Frontmatter {
  * literal block scalars. Unknown constructs are kept as raw strings.
  */
 export function parseFrontmatter(content: string): Frontmatter | undefined {
-  const lines = content.replace(/^﻿/, '').split(/\r?\n/);
+  const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/);
   if (lines[0]?.trim() !== '---') return undefined;
   const end = lines.findIndex((l, idx) => idx > 0 && (l.trim() === '---' || l.trim() === '...'));
   if (end === -1) return undefined;
 
-  const fields: Record<string, string | string[]> = {};
-  const keyLines: Record<string, number> = {};
+  const fields: Record<string, string | string[]> = Object.create(null);
+  const keyLines: Record<string, number> = Object.create(null);
+  // A uniformly indented root mapping is still valid YAML.
+  const rootIndent = Math.min(
+    ...lines
+      .slice(1, end)
+      .filter((l) => /^\s*["']?[A-Za-z0-9_-]+["']?\s*:/.test(l))
+      .map((l) => /^\s*/.exec(l)![0].length),
+    Infinity,
+  );
   let i = 1;
   while (i < end) {
     const line = lines[i]!;
-    const m = /^([A-Za-z0-9_-]+)\s*:\s*(.*)$/.exec(line);
+    const indent = /^\s*/.exec(line)![0].length;
+    const m = indent === rootIndent ? /^\s*["']?([A-Za-z0-9_-]+)["']?\s*:(?:\s+(.*)|$)/.exec(line) : null;
     if (!m) {
       i++;
       continue;
     }
     const key = m[1]!;
-    const rest = m[2]!.trim();
     keyLines[key] = i + 1;
+    let rest = (m[2] ?? '').trim();
+    // Flow sequences may span several lines: `[Read,\n  Bash]`.
+    if (rest.startsWith('[') && !rest.includes(']')) {
+      while (i + 1 < end && !rest.includes(']')) rest += ' ' + lines[++i]!.trim();
+    }
     i++;
 
     if (rest === '' || rest === '|' || rest === '>' || /^[|>][+-]?$/.test(rest)) {
       const block: string[] = [];
-      while (i < end && (/^\s+/.test(lines[i]!) || lines[i]!.trim() === '')) {
+      while (
+        i < end &&
+        (/^\s*$/.test(lines[i]!) || /^\s*/.exec(lines[i]!)![0].length > rootIndent || /^\s*-\s/.test(lines[i]!))
+      ) {
         block.push(lines[i]!);
         i++;
       }

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { RULES } from '../dist/index.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ICON = { critical: '🟣', high: '🔴', medium: '🟠', low: '🔵', info: '⚪' };
+const ICON = { critical: '\u{1F7E3}', high: '\u{1F534}', medium: '\u{1F7E0}', low: '\u{1F535}', info: '\u26AA' };
 
 const lines = [
   '# Rules',
@@ -23,10 +23,20 @@ const lines = [
 ];
 
 for (const r of RULES) {
-  lines.push(`## ${r.id}`, '', `**${r.title}** · \`${r.name}\` · ${ICON[r.severity]} ${r.severity} · ${r.category}`, '');
+  lines.push(
+    `## ${r.id}`,
+    '',
+    `**${r.title}** \u00B7 \`${r.name}\` \u00B7 ${ICON[r.severity]} ${r.severity} \u00B7 ${r.category}`,
+    '',
+  );
   lines.push(r.description, '', `**Fix:** ${r.remediation}`, '');
   if (r.references?.length) lines.push('**References:**', '', ...r.references.map((u) => `- <${u}>`), '');
-  lines.push(`Suppress: \`--ignore ${r.id}\`, \`"ignore": ["${r.id}"]\` in \`.bekci.json\`, or a \`bekci-ignore ${r.id}\` comment on the line.`, '');
+  lines.push(
+    r.severity === 'critical'
+      ? `Suppress: \`--ignore ${r.id}\` or \`"ignore": ["${r.id}"]\` in \`.bekci.json\`. Critical findings cannot be silenced with inline comments.`
+      : `Suppress: \`--ignore ${r.id}\`, \`"ignore": ["${r.id}"]\` in \`.bekci.json\`, or a \`bekci-ignore ${r.id}\` comment on the line (project files only).`,
+    '',
+  );
 }
 
 writeFileSync(path.join(root, 'docs', 'rules.md'), lines.join('\n'));

@@ -49,18 +49,26 @@ export async function scan(options: ScanOptions = {}): Promise<ScanOutput> {
     home: options.home,
   });
 
-  const ctx: ScanContext = { files: found.files, servers: found.servers, hooks: found.hooks };
   const errors = [...found.errors];
 
   const ignored = new Set((options.ignoreRules ?? []).map((r) => findRule(r)?.id ?? r.toUpperCase()));
   const only = options.onlyRules?.length ? new Set(options.onlyRules.map((r) => findRule(r)?.id ?? r.toUpperCase())) : undefined;
   const pathFilters = (options.ignorePaths ?? []).map(globToRegExp);
+  // Ignored paths are removed before analysis, so they neither produce findings nor feed
+  // cross-file rules (lethal trifecta) nor inflate the stats.
+  const kept = (file: { displayPath: string }) => !pathFilters.some((re) => re.test(file.displayPath));
+  const ctx: ScanContext = {
+    files: found.files.filter(kept),
+    servers: found.servers.filter((s) => kept(s.file)),
+    hooks: found.hooks.filter((h) => kept(h.file)),
+  };
   const minRank = severityRank(options.minSeverity ?? 'low');
   const inlineIgnores = options.inlineIgnores ?? true;
 
   const findings: Finding[] = [];
   const seen = new Set<string>();
   let suppressed = 0;
+  let ruleFailed = false;
 
   for (const rule of options.rules ?? RULES) {
     if (ignored.has(rule.id) || (only && !only.has(rule.id))) continue;
@@ -70,9 +78,16 @@ export async function scan(options: ScanOptions = {}): Promise<ScanOutput> {
         if (severityRank(severity) < minRank) return;
         const file = input.file;
         if (pathFilters.some((re) => re.test(file.displayPath))) return;
-        // Inline comments are written by whoever wrote the file. Only honour them in the project
-        // being scanned (not in installed third-party skills/plugins), and never for criticals.
-        if (inlineIgnores && severity !== 'critical' && file.scope === 'project' && input.line && isSuppressed(file.content, input.line, rule.id)) {
+        // Inline comments are written by whoever wrote the file. Only honour them in the project's
+        // own files (not in skills, plugins or anything else vendored in), and never for criticals.
+        if (
+          inlineIgnores &&
+          severity !== 'critical' &&
+          file.scope === 'project' &&
+          !file.vendored &&
+          input.line &&
+          isSuppressed(file.content, input.line, rule.id)
+        ) {
           suppressed++;
           return;
         }
@@ -97,6 +112,7 @@ export async function scan(options: ScanOptions = {}): Promise<ScanOutput> {
         });
       });
     } catch (e) {
+      ruleFailed = true;
       errors.push(`Rule ${rule.id} failed: ${(e as Error).message}`);
     }
   }
@@ -127,7 +143,7 @@ export async function scan(options: ScanOptions = {}): Promise<ScanOutput> {
     grade,
     errors,
     suppressed,
-    incomplete: found.truncated,
+    incomplete: found.truncated || ruleFailed,
   };
 }
 

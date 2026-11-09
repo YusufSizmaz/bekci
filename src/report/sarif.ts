@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { RULES } from '../rules/index.js';
@@ -22,7 +23,9 @@ const SECURITY_SEVERITY: Record<Severity, string> = {
 };
 
 export function renderSarif(result: ScanOutput, root: string = process.cwd()): string {
-  const absRoot = path.resolve(root);
+  let absRoot = path.resolve(root);
+  // A single-file target: locations are relative to its directory.
+  if (statSync(absRoot, { throwIfNoEntry: false })?.isFile()) absRoot = path.dirname(absRoot);
   const rules = RULES.map((r) => ({
     id: r.id,
     name: r.name,

@@ -32,11 +32,17 @@ export function executableUnits(ctx: ScanContext): TextUnit[] {
     units.push({ file, text: file.content, group: file.path });
   }
   for (const s of ctx.servers) {
-    const text = [s.command ?? '', ...s.args, ...Object.values(s.env), s.url ?? ''].join(' ');
+    const text = [s.commandLine, ...Object.values(s.env), s.url ?? ''].join(' ');
     units.push({ file: s.file, text, fixedLine: s.line, label: `MCP server "${s.name}"`, group: `${s.file.path}#mcp:${s.name}` });
   }
   for (const h of ctx.hooks) {
-    units.push({ file: h.file, text: h.command, fixedLine: h.line, label: `${h.event} hook`, group: `${h.file.path}#hook:${h.line}` });
+    units.push({
+      file: h.file,
+      text: h.command,
+      fixedLine: h.line,
+      label: `${h.event} hook`,
+      group: `${h.file.path}#hook:${h.line}`,
+    });
   }
   return units;
 }
@@ -57,9 +63,15 @@ export function* hits(unit: TextUnit, re: RegExp): Generator<Hit> {
       continue;
     }
     // Comments in bundled scripts are not executed; they often *describe* attacks.
-    if (unit.file.kind === 'script' && !unit.label && isCommentAt(unit.text, m.index)) continue;
+    if (unit.file.kind === 'script' && !unit.label && isCommentAt(unit.file, unit.text, m.index)) continue;
     const pos = unit.fixedLine ? { line: unit.fixedLine, column: 1 } : positionAt(unit.text, m.index);
-    yield { line: pos.line, column: pos.column, index: m.index, match: m, evidence: excerptAround(unit.text, m.index, m[0].length) };
+    yield {
+      line: pos.line,
+      column: pos.column,
+      index: m.index,
+      match: m,
+      evidence: excerptAround(unit.text, m.index, m[0].length),
+    };
   }
 }
 
@@ -85,12 +97,24 @@ export function isInsideFencedCode(text: string, index: number): boolean {
   return count % 2 === 1;
 }
 
-/** True when `index` sits in a line comment (`//`, `#`, `--`, `;`, `REM`) or a block-comment line. */
-export function isCommentAt(text: string, index: number): boolean {
+/** Line-comment markers per script language. Only these count: a `;` or `--` prefix is code in most languages. */
+const LINE_COMMENT: Array<[RegExp, RegExp]> = [
+  [/\.(sh|bash|zsh|fish|py|rb|pl|ps1|psm1|r|ya?ml|toml)$|^[^.]*$/i, /^#(?!!)/],
+  [/\.(js|mjs|cjs|ts|mts|cts|go|rs|java|kt|swift|c|cc|cpp|h|cs|scala)$/i, /^\/\//],
+  [/\.php$/i, /^(\/\/|#(?!\[))/],
+  [/\.(lua|sql|hs)$/i, /^--/],
+  [/\.applescript$/i, /^(--|#)/],
+  [/\.(bat|cmd)$/i, /^(rem\s|::)/i],
+];
+
+/**
+ * True when `index` sits in a whole-line comment of the script's language. Deliberately
+ * conservative: trailing and block comments are treated as code, because an attacker can make
+ * code look like a comment far more easily than the other way round.
+ */
+export function isCommentAt(file: { path: string }, text: string, index: number): boolean {
   const lineStart = text.lastIndexOf('\n', index - 1) + 1;
-  const before = text.slice(lineStart, index);
-  const trimmed = before.trimStart();
-  if (/^(\/\/|#(?!!)|--|;|\*|\/\*|REM\s|<!--|"""|\'\'\')/i.test(trimmed)) return true;
-  // Trailing comment after code: `foo() // see ~/.ssh`. Ignore `#` inside URLs and strings.
-  return /(^|\s)(\/\/|#)\s/.test(before) && !/["'`][^"'`]*$/.test(before);
+  const trimmed = text.slice(lineStart, index).trimStart();
+  const base = file.path.split(/[\\/]/).pop() ?? '';
+  return LINE_COMMENT.some(([ext, marker]) => ext.test(base) && marker.test(trimmed));
 }

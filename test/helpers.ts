@@ -44,7 +44,12 @@ export const fake = {
   anthropic: ['sk-', 'ant-', 'api03-', 'Zx'.repeat(46)].join(''),
   aws: ['AK', 'IA', 'Q3EGRT5HJ8KLMN2P'].join(''),
   slack: ['xo', 'xb-', '8264951307-zQ4mWv7nTt2kLp'].join(''),
-  privateKey: ['-----BEGIN ', 'OPENSSH PRIVATE KEY-----\n', 'b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW', '\n-----END OPENSSH PRIVATE KEY-----'].join(''),
+  privateKey: [
+    '-----BEGIN ',
+    'OPENSSH PRIVATE KEY-----\n',
+    'b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW',
+    '\n-----END OPENSSH PRIVATE KEY-----',
+  ].join(''),
 };
 
 export function json(v: unknown): string {
