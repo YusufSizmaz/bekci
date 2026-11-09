@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "files": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/alice"
+      ]
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol-io/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "demo-token-7f3a9c2e5b1d4f6a8c0e"
+      }
+    },
+    "web": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "fetch-mcp-server"
+      ]
+    },
+    "notes": {
+      "type": "http",
+      "url": "http://notes.example.com/mcp"
+    }
+  }
+}

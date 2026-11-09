@@ -1,0 +1,64 @@
+{
+  "name": "bekci",
+  "version": "0.1.0",
+  "description": "Zero-dependency, offline security scanner for AI agent setups: skills, MCP servers, hooks, permissions and instruction files for Claude Code, Codex, Cursor, Gemini CLI and more.",
+  "keywords": [
+    "security",
+    "scanner",
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "agent-skills",
+    "codex",
+    "cursor",
+    "gemini-cli",
+    "prompt-injection",
+    "supply-chain",
+    "sarif",
+    "ai-agents"
+  ],
+  "homepage": "https://github.com/YusufSizmaz/bekci#readme",
+  "bugs": "https://github.com/YusufSizmaz/bekci/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YusufSizmaz/bekci.git"
+  },
+  "license": "MIT",
+  "author": "Yusuf Sizmaz (https://github.com/YusufSizmaz)",
+  "type": "module",
+  "bin": {
+    "bekci": "dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.18"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json && chmod +x dist/cli.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "docs": "npm run build && node scripts/gen-rules-doc.mjs",
+    "demo": "npm run build && node scripts/render-demo.mjs",
+    "selfscan": "node dist/cli.js . --no-user",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
+  }
+}

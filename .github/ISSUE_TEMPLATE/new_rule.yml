@@ -1,0 +1,27 @@
+name: New detection
+description: Propose a rule for an attack technique bekci does not catch yet
+labels: [new-rule]
+body:
+  - type: textarea
+    id: technique
+    attributes:
+      label: Technique
+      description: What does the attacker do, and what does it look like in a skill, MCP config, hook or rules file?
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example that should be flagged
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: benign
+    attributes:
+      label: Similar but benign examples that must NOT be flagged
+      render: text
+  - type: input
+    id: reference
+    attributes:
+      label: Reference (write-up, CVE, incident)

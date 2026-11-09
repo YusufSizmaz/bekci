@@ -1,0 +1,4 @@
+{
+  // bekci scans its own repository in CI. The examples and tests are malicious on purpose.
+  "ignorePaths": ["examples/**", "test/**"]
+}
