@@ -43,7 +43,7 @@ export const fake = {
   github: ['gh', 'p_', 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8'].join(''),
   anthropic: ['sk-', 'ant-', 'api03-', 'Zx'.repeat(46)].join(''),
   aws: ['AK', 'IA', 'Q3EGRT5HJ8KLMN2P'].join(''),
-  slack: ['xo', 'xb-', '1234567890-abcdefghijkl'].join(''),
+  slack: ['xo', 'xb-', '8264951307-zQ4mWv7nTt2kLp'].join(''),
   privateKey: ['-----BEGIN ', 'OPENSSH PRIVATE KEY-----\n', 'b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW', '\n-----END OPENSSH PRIVATE KEY-----'].join(''),
 };
 

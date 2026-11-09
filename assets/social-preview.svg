@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <radialGradient id="glow" cx="78%" cy="30%" r="60%">
+      <stop offset="0" stop-color="#8839ef" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#11111b" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="640" fill="#11111b"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+  <g font-family="'JetBrains Mono','SF Mono',Menlo,monospace">
+    <!-- shield -->
+    <path d="M150 150 L230 120 L310 150 L310 250 C310 320 270 360 230 380 C190 360 150 320 150 250 Z" fill="none" stroke="#cba6f7" stroke-width="10" stroke-linejoin="round"/>
+    <circle cx="230" cy="245" r="26" fill="#cba6f7"/>
+    <text x="370" y="270" fill="#ffffff" font-size="132" font-weight="700">bekci</text>
+    <text x="374" y="330" fill="#cdd6f4" font-size="34">the night watchman for your AI agent</text>
+    <text x="150" y="455" fill="#a6adc8" font-size="27">Scans skills, MCP servers, hooks and permissions for</text>
+    <text x="150" y="495" fill="#a6adc8" font-size="27">prompt injection, credential theft and supply-chain attacks.</text>
+    <rect x="150" y="535" width="250" height="56" rx="10" fill="#1e1e2e" stroke="#45475a"/>
+    <text x="172" y="572" fill="#a6e3a1" font-size="26">$ npx bekci</text>
+    <g font-size="20" font-weight="700">
+      <rect x="840" y="535" width="122" height="34" rx="6" fill="#8839ef"/><text x="853" y="559" fill="#fff">CRITICAL</text>
+      <rect x="972" y="535" width="76" height="34" rx="6" fill="#e64553"/><text x="986" y="559" fill="#fff">HIGH</text>
+      <rect x="1058" y="535" width="96" height="34" rx="6" fill="#f9e2af"/><text x="1069" y="559" fill="#1e1e2e">MEDIUM</text>
+    </g>
+    <text x="840" y="600" fill="#7f849c" font-size="20">offline · zero deps · SARIF</text>
+  </g>
+</svg>

@@ -12,7 +12,15 @@ import {
   unrestrictedShell,
 } from './permissions.js';
 import { hardcodedSecret, plaintextCredential } from './secrets.js';
-import { broadFilesystem, insecureRemote, opaqueBinary, privilegedContainer, typosquat, unpinnedPackage } from './supply-chain.js';
+import {
+  broadFilesystem,
+  insecureRemote,
+  opaqueBinary,
+  privilegedContainer,
+  typosquat,
+  unpinnedPackage,
+  unscannableFile,
+} from './supply-chain.js';
 import { lethalTrifecta } from './toxic-flow.js';
 
 export const RULES: readonly Rule[] = [
@@ -41,6 +49,7 @@ export const RULES: readonly Rule[] = [
   broadFilesystem,
   typosquat,
   opaqueBinary,
+  unscannableFile,
   lethalTrifecta,
 ];
 

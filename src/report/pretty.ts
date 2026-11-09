@@ -50,7 +50,7 @@ export function renderPretty(result: ScanOutput, opts: { verbose?: boolean } = {
   const gradeColor = { A: c.green, B: c.green, C: c.yellow, D: c.red, F: c.magenta }[result.grade];
   out.push(
     `  ${c.bold(gradeColor(`Grade ${result.grade}`))} ${c.dim(`(${result.score}/100)`)}   ` +
-      (result.findings.length ? counts : c.green('No issues found')),
+      (result.findings.length ? counts : result.incomplete ? c.yellow('Scan incomplete') : c.green('No issues found')),
   );
   if (result.suppressed) out.push(`  ${c.dim(`${result.suppressed} finding(s) suppressed by bekci-ignore comments`)}`);
   if (result.findings.length) {

@@ -52,11 +52,11 @@ npx bekci https://github.com/someone/repo/tree/main/skills/pdf
 npx bekci ./my-project --no-user
 ```
 
-Exit code `1` means there is something at or above `--fail-on` (default: `high`).
+Exit code `1` means there is something at or above `--fail-on` (default: `high`). Exit code `2` means a usage error or an incomplete scan.
 
 ## What it finds
 
-**26 rules** in seven groups. Full list with examples: [docs/rules.md](docs/rules.md).
+**27 rules** in seven groups. Full list with examples: [docs/rules.md](docs/rules.md).
 
 | | Examples |
 | --- | --- |
@@ -65,7 +65,7 @@ Exit code `1` means there is something at or above `--fail-on` (default: `high`)
 | 📤 **Exfiltration** | Reads of `~/.ssh`, cloud credentials, browser passwords, Keychain or wallets; webhook.site / ngrok / Discord webhooks; **a skill or script that does both** (critical) |
 | 🔑 **Secrets** | 30+ token formats (Anthropic, OpenAI, GitHub, AWS, Slack, Stripe…) and literal `*_API_KEY` / `Authorization` values in MCP configs. Never printed in full |
 | 🔓 **Permissions** | `bypassPermissions`, Codex `danger-full-access` + `approval_policy = "never"`, `Bash(*)`, `Bash(curl:*)`, `enableAllProjectMcpServers`, Gemini `trust: true`, auto-approved tools, project hooks |
-| 📦 **Supply chain** | Unpinned `npx`/`uvx`/`docker` servers, typosquats of popular MCP packages, plain-HTTP remote servers, `--privileged` containers and Docker socket mounts, whole-home filesystem access, compiled binaries in skills |
+| 📦 **Supply chain** | Unpinned `npx`/`uvx`/`docker` servers, typosquats of popular MCP packages, plain-HTTP remote servers, `--privileged` containers and Docker socket mounts, whole-home filesystem access, compiled binaries in skills, files padded past the scan limit |
 | ☠️ **Toxic flows** | The lethal trifecta: private data + untrusted content + a way out, across all MCP servers enabled for an agent |
 
 ## Supported agents
@@ -134,10 +134,12 @@ Silence a reviewed finding inline with `bekci-ignore` (same line) or `bekci-igno
 Watch out for pages that say "ignore previous instructions".
 ```
 
-Two guardrails, because the file under review is controlled by whoever wrote it:
+Guardrails, because the file under review is controlled by whoever wrote it:
 
 - **Critical findings cannot be suppressed inline.** Use `--ignore` or `.bekci.json`.
-- **Remote scans (`github:…`) ignore the repository's own `.bekci.json` and inline comments**, and never follow symlinks.
+- **Inline comments only count in the project you are scanning**, never in installed third-party skills and plugins.
+- **Remote scans (`github:…`) ignore the repository's own `.bekci.json` and inline comments**, never follow symlinks, and run `git` with your global config, hooks and filters disabled.
+- When a `.bekci.json` is picked up, bekci says so and lists what it ignores.
 
 <details>
 <summary><b>All CLI options</b></summary>
@@ -182,7 +184,8 @@ for (const f of result.findings) console.log(f.severity, f.ruleId, `${f.file}:${
 - **Offline and private.** No network calls, no telemetry, no LLM in the loop. Your configs and prompts never leave the machine. The only network access is the `git clone` you ask for with `github:…`.
 - **Zero runtime dependencies.** A supply-chain scanner should not be a supply-chain risk. The TOML, JSONC and frontmatter parsers are built in.
 - **Deterministic and fast.** Same input, same output. A full scan of a typical machine takes well under a second.
-- **Never prints a secret.** Tokens are masked in every output format.
+- **Never prints a secret.** Tokens are masked in every message, evidence snippet and output format.
+- **Hardened against what it scans.** Scanned files are hostile input: no regex backtracking blow-ups, no prototype pollution from config parsers, terminal escape sequences stripped from output, oversized or truncated scans reported instead of passing silently. See [test/hardening.test.ts](test/hardening.test.ts).
 - **Low noise.** Rules are tuned against real setups. Quoted examples, code spans and scoped commands are downgraded or skipped instead of flooding you. [Report a false positive](https://github.com/YusufSizmaz/bekci/issues/new?template=false_positive.yml) if you hit one.
 
 bekci is a static analyser. It catches known techniques and risky configuration. It cannot prove that a skill is safe, and an attacker who knows the rules can try to evade them. Treat a clean report as "nothing obviously wrong", not as a guarantee.

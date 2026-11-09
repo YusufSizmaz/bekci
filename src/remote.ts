@@ -38,7 +38,9 @@ function git(args: string[], cwd?: string): Promise<void> {
       {
         cwd,
         timeout: 120_000,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_LFS_SKIP_SMUDGE: '1', GIT_CONFIG_NOSYSTEM: '1' },
+        // Ignore the user's git config: global filter/smudge drivers or hooks must never run
+        // on attacker-controlled content.
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_LFS_SKIP_SMUDGE: '1', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: os.devNull },
         maxBuffer: 10 * 1024 * 1024,
       },
       (err, _stdout, stderr) => (err ? reject(new Error(stderr.trim() || err.message)) : resolve()),
@@ -52,7 +54,7 @@ export async function fetchRemote(target: RemoteTarget): Promise<{ dir: string; 
   const cleanup = () => fs.rm(tmp, { recursive: true, force: true });
   try {
     const repo = path.join(tmp, 'repo');
-    const args = ['-c', 'core.symlinks=false', '-c', 'core.hooksPath=/dev/null', 'clone', '--depth', '1', '--quiet', '--no-tags'];
+    const args = ['-c', 'core.symlinks=false', '-c', `core.hooksPath=${os.devNull}`, '-c', 'core.fsmonitor=false', '-c', 'protocol.file.allow=never', 'clone', '--depth', '1', '--quiet', '--no-tags'];
     if (target.ref) args.push('--branch', target.ref);
     args.push('--', target.cloneUrl, repo);
     await git(args);

@@ -11,7 +11,7 @@ export const SENSITIVE_PATHS: Array<[RegExp, string]> = [
   [/\.azure[/\\](accessTokens|msal_token_cache|azureProfile)/, 'Azure credentials'],
   [/\.kube[/\\]config\b/, 'Kubernetes credentials'],
   [/\.docker[/\\]config\.json/, 'Docker registry credentials'],
-  [new RegExp(String.raw`${HOME}[/\\]\.(npmrc|pypirc|netrc|git-credentials)\b|\bcat\s+[^\n]*\.(npmrc|pypirc|netrc|git-credentials)\b`), 'package registry / git credentials'],
+  [new RegExp(String.raw`${HOME}[/\\]\.(npmrc|pypirc|netrc|git-credentials)\b|\bcat\s+[^\n]{0,300}\.(npmrc|pypirc|netrc|git-credentials)\b`), 'package registry / git credentials'],
   [/\.config[/\\]gh[/\\]hosts\.yml/, 'GitHub CLI token'],
   [/\bsecurity\s+(find-generic-password|find-internet-password|dump-keychain)\b|login\.keychain(-db)?\b/, 'macOS Keychain'],
   [/[/\\](Login Data|Web Data)\b|(Chrome|Chromium|Brave|Edge|Opera)[^\n]{0,60}[/\\]Cookies\b|cookies\.sqlite|logins\.json|key[34]\.db\b/, 'browser passwords / cookies'],
@@ -46,7 +46,7 @@ const EXFIL_HOST_RE = new RegExp(
 );
 
 const FILE_UPLOAD =
-  /\bcurl\b[^\n]*(\s-d\s*['"]?@|--data(-binary|-raw|-urlencode)?[\s=]+['"]?@|\s-F\s*['"]?[\w-]+=@|--form\s+['"]?[\w-]+=@|\s(-T|--upload-file)\s+\S)|\bwget\b[^\n]*--post-file[\s=]/;
+  /\bcurl\b[^\n]{0,300}(\s-d\s*['"]?@|--data(-binary|-raw|-urlencode)?[\s=]+['"]?@|\s-F\s*['"]?[\w-]+=@|--form\s+['"]?[\w-]+=@|\s(-T|--upload-file)\s+\S)|\bwget\b[^\n]{0,300}--post-file[\s=]/;
 
 export const sensitiveFileAccess: Rule = {
   id: 'BK008',

@@ -39,6 +39,19 @@ function isPlaceholder(s: string): boolean {
   return PLACEHOLDER.test(s);
 }
 
+const INLINE_CREDENTIAL = /\b((?:bearer|token|api[_-]?key|apikey|secret|password|passwd|pwd|authorization)["']?\s*[:=]?\s*["']?(?:bearer\s+)?)([A-Za-z0-9_\-./+=]{12,})/gi;
+
+/** Masks every recognisable secret in a human-readable string (messages, evidence). */
+export function redactSecrets(text: string): string {
+  let out = text;
+  for (const [re] of SECRET_PATTERNS) {
+    out = out.replace(new RegExp(re.source, re.flags), (m) => (isPlaceholder(m) ? m : redact(m)));
+  }
+  return out.replace(INLINE_CREDENTIAL, (m, prefix: string, value: string) =>
+    /^\$|^\{\{|\*{8}/.test(value) || isPlaceholder(value) ? m : prefix + redact(value),
+  );
+}
+
 export function matchesKnownSecret(value: string): string | undefined {
   for (const [re, what] of SECRET_PATTERNS) {
     const r = new RegExp(re.source, re.flags.replace('g', ''));

@@ -307,3 +307,22 @@ export const opaqueBinary: Rule = {
     }
   },
 };
+
+export const unscannableFile: Rule = {
+  id: 'BK207',
+  name: 'unscannable-file',
+  title: 'Agent file too large to scan',
+  severity: 'high',
+  category: 'supply-chain',
+  description:
+    'A skill, instruction, script or config file is larger than the scan limit (2 MB), so its contents were not ' +
+    'checked. Legitimate agent files are rarely this big; padding a file is a simple way to push a payload past ' +
+    'scanners and human reviewers alike.',
+  remediation: 'Open the file and find out why it is so large. Do not install it until you know what it contains.',
+  run(ctx, report) {
+    for (const file of ctx.files) {
+      if (!file.tooLarge) continue;
+      report({ file, message: `${(file.tooLarge / 1024 / 1024).toFixed(1)} MB ${file.kind} file was not scanned (limit 2 MB)` });
+    }
+  },
+};

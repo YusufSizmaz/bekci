@@ -40,7 +40,7 @@ npx bekci ./proje --no-user                 # sadece proje (CI'ın gördüğü)
 
 ## Neleri yakalar?
 
-26 kural: görünmez Unicode ile gizlenmiş talimatlar (çözülüp gösterilir), "önceki talimatları yok say" kalıpları, `curl | bash`, SSH anahtarı okuyup dışarı gönderen script'ler, düz metin API anahtarları, `bypassPermissions` ve `Bash(*)` izinleri, sürümü sabitlenmemiş veya typosquat MCP paketleri, ayrıcalıklı Docker container'ları ve "lethal trifecta". Tam liste: [docs/rules.md](docs/rules.md).
+27 kural: görünmez Unicode ile gizlenmiş talimatlar (çözülüp gösterilir), "önceki talimatları yok say" kalıpları, `curl | bash`, SSH anahtarı okuyup dışarı gönderen script'ler, düz metin API anahtarları, `bypassPermissions` ve `Bash(*)` izinleri, sürümü sabitlenmemiş veya typosquat MCP paketleri, ayrıcalıklı Docker container'ları ve "lethal trifecta". Tam liste: [docs/rules.md](docs/rules.md).
 
 **Desteklenen agent'lar:** Claude Code, Codex, Cursor, Gemini CLI, Claude Desktop, VS Code / Copilot, Windsurf, Cline ve tüm Agent Skills klasörleri.
 
