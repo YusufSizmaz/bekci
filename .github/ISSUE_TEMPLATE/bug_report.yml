@@ -1,0 +1,21 @@
+name: Bug report
+description: Crash, wrong output or missing file discovery
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Command and output
+      description: Run with BEKCI_DEBUG=1 for stack traces. Redact paths and secrets.
+      render: text
+  - type: input
+    id: env
+    attributes:
+      label: bekci version, Node version, OS
+      placeholder: "0.1.0, Node 22.12, macOS 15"

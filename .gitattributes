@@ -1,0 +1,4 @@
+* text=auto eol=lf
+# The demo plugin contains invisible Unicode on purpose.
+examples/** linguist-documentation
+assets/*.svg linguist-generated
