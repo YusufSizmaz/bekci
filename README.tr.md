@@ -88,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: YusufSizmaz/bekci@v0.1.0
+      - uses: YusufSizmaz/bekci@v0.1.2
         with:
           fail-on: high # critical | high | medium | low | none
 ```
@@ -96,7 +96,7 @@ jobs:
 Action, iş sayfasına bir özet tablosu yazar ve SARIF yükler. Böylece bulgular doğru satırlarda code scanning uyarısı olarak görünür. Çıktıları: `grade`, `score`, `findings`. Diğer CI sistemlerinde:
 
 ```bash
-npx bekci@0.1.0 . --no-user -o bekci.sarif -o bekci.json -o bekci.md
+npx bekci@0.1.2 . --no-user -o bekci.sarif -o bekci.json -o bekci.md
 ```
 
 ## Yapılandırma

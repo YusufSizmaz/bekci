@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-10
+
 ### Fixed
 
 False positives found by scanning 80 of the most-starred skill, plugin and MCP repositories:
@@ -18,8 +20,14 @@ False positives found by scanning 80 of the most-starred skill, plugin and MCP r
 ### Changed
 
 - `github:` targets allow 10 minutes for the clone and explain a timeout instead of failing with an empty message.
+- `npm version` now updates the pinned versions in both READMEs, the issue templates, the changelog and the demo image as part of the release commit.
 
-- Releases are published by CI through npm trusted publishing (no stored token, automatic provenance) and npm staged publishing (each version is approved by a maintainer with 2FA). Re-running the release for a version already on npm is a no-op.
+## [0.1.1] - 2026-11-10
+
+### Changed
+
+- Releases are published by CI through npm [trusted publishing](https://docs.npmjs.com/trusted-publishers) (no stored token) and npm staged publishing (each version is approved by a maintainer with 2FA). Re-running the release for a version already on npm is a no-op.
+- First release with a signed [provenance attestation](https://docs.npmjs.com/generating-provenance-statements): `npm audit signatures` verifies that the package was built from this repository by GitHub Actions.
 
 ## [0.1.0] - 2026-11-10
 
@@ -47,5 +55,7 @@ bekci treats every scanned file as hostile input:
 - Remote clones run with the user's git config, hooks, filters and symlinks disabled.
 - All source files are ASCII-only, enforced in CI.
 
-[Unreleased]: https://github.com/YusufSizmaz/bekci/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/YusufSizmaz/bekci/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/YusufSizmaz/bekci/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/YusufSizmaz/bekci/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/YusufSizmaz/bekci/releases/tag/v0.1.0

@@ -34,7 +34,7 @@ for (const file of ['README.md', 'README.tr.md']) {
 
 edit('CHANGELOG.md', (s) => {
   if (s.includes(`## [${version}]`)) return s;
-  const previous = /## \[(\d+\.\d+\.\d+)\]/.exec(s)?.[1];
+  const previous = /## \[(\d+\.\d+\.\d+)\]/.exec(s)?.[1]; // newest released version
   let out = s.replace('## [Unreleased]', `## [Unreleased]\n\n## [${version}] - ${date}`);
   out = out.replace(
     /\[Unreleased\]: .*\n/,
