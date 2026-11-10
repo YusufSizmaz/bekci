@@ -11,7 +11,12 @@ const RUNNER = `(?:sudo\\s+(?:-\\S+\\s+)*)?(?:(?:/usr)?(?:/local)?/s?bin/)?(?:en
 
 const RCE_PATTERNS: RegExp[] = [
   // curl ... | sh, including `| tee f | sh`, `|& bash`, URLs with `&`, `/bin/bash`, `env bash`
-  new RegExp(`\\b(curl|wget|fetch)\\s+[^\\s|;&][^\\n;]{0,300}?\\|&?\\s*${RUNNER}\\b`, 'i'),
+  // The interpreter must read its program from stdin: `| python3 -c '...'`, `| node script.js` or
+  // `| python3 -m json.tool` only process the downloaded data.
+  new RegExp(
+    `\\b(curl|wget|fetch)\\s+[^\\s|;&][^\\n;]{0,300}?\\|&?\\s*${RUNNER}\\b(?![ \\t]+(?:-[A-Za-z]*[cemp]\\b|[^\\s\\-|;&)'"\`]))`,
+    'i',
+  ),
   // bash <(curl ...), . <(curl ...), source <(curl ...)
   new RegExp(`(?:^|[\\s;&|(])(?:${RUNNER}|source|\\.)\\s+(?:-c\\s+)?["']?\\s*<\\(\\s*(curl|wget)\\b`, 'im'),
   // eval "$(curl ...)", bash -c "$(curl ...)", node -e "$(curl ...)", python3 -c "$(curl ...)"
@@ -165,6 +170,8 @@ export const destructiveCommand: Rule = {
   run(ctx, report) {
     for (const unit of executableUnits(ctx)) {
       const lines = new Set<number>();
+      // Documentation lists destructive commands far more often than it runs them (deny lists,
+      // hook examples): keep it visible, but low.
       const docs = MARKDOWN_KINDS.has(unit.file.kind) && !unit.label;
       for (const [re, what, sev, executableOnly] of DESTRUCTIVE) {
         // SQL in documentation is almost always an example, not an instruction.
@@ -176,7 +183,7 @@ export const destructiveCommand: Rule = {
             file: unit.file,
             line: h.line,
             column: h.column,
-            severity: sev,
+            severity: docs ? 'low' : sev,
             message: where(unit, `Command ${what}: \`${excerpt(h.match[0], 60)}\``),
             evidence: h.evidence,
           });

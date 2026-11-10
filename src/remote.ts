@@ -47,6 +47,9 @@ function parseRemoteUnchecked(arg: string): RemoteTarget | undefined {
   return undefined;
 }
 
+/** Large monorepos can take minutes to shallow-clone on a slow link. */
+const CLONE_TIMEOUT_MS = 10 * 60_000;
+
 function git(args: string[], cwd?: string): Promise<void> {
   return new Promise((resolve, reject) => {
     execFile(
@@ -54,7 +57,7 @@ function git(args: string[], cwd?: string): Promise<void> {
       args,
       {
         cwd,
-        timeout: 120_000,
+        timeout: CLONE_TIMEOUT_MS,
         // Ignore the user's git config: global filter/smudge drivers or hooks must never run
         // on attacker-controlled content.
         env: {
@@ -66,7 +69,17 @@ function git(args: string[], cwd?: string): Promise<void> {
         },
         maxBuffer: 10 * 1024 * 1024,
       },
-      (err, _stdout, stderr) => (err ? reject(new Error(stderr.trim() || err.message)) : resolve()),
+      (err, _stdout, stderr) => {
+        if (!err) return resolve();
+        if (err.killed) {
+          return reject(
+            new Error(
+              `git clone timed out after ${CLONE_TIMEOUT_MS / 60_000} minutes (very large repository?); clone it yourself and scan the directory`,
+            ),
+          );
+        }
+        reject(new Error(stderr.trim() || err.message));
+      },
     );
   });
 }

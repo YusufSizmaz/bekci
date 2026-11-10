@@ -4,7 +4,20 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+False positives found by scanning 80 of the most-starred skill, plugin and MCP repositories:
+
+- Citations with "e.g." and anti-pattern lists ("❌ … without user consent") are no longer reported as injection or concealment; "without consent" is no longer a concealment phrase.
+- "Enable Developer Mode" (Discord, Android, Chrome) is no longer a jailbreak phrase.
+- `curl … | python3 -c '…'`, `| node script.js` and `| python3 -m json.tool` process downloaded data and are no longer reported as remote code execution.
+- Destructive commands in documentation are low; chat webhooks and tunnels are medium; credential setup guides in prose are medium instead of critical; pattern lists in detector scripts are not credential reads.
+- Example database URLs with dummy passwords or local hosts are not reported as secrets.
+- Findings in test fixture directories are reported one severity lower and labelled.
+
 ### Changed
+
+- `github:` targets allow 10 minutes for the clone and explain a timeout instead of failing with an empty message.
 
 - Releases are published by CI through npm trusted publishing (no stored token, automatic provenance) and npm staged publishing (each version is approved by a maintainer with 2FA). Re-running the release for a version already on npm is a no-op.
 

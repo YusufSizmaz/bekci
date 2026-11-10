@@ -74,7 +74,11 @@ export async function scan(options: ScanOptions = {}): Promise<ScanOutput> {
     if (ignored.has(rule.id) || (only && !only.has(rule.id))) continue;
     try {
       rule.run(ctx, (input) => {
-        const severity = input.severity ?? rule.severity;
+        // Test fixtures of scanners and skill repos contain attacks on purpose. They are not loaded
+        // by agents, so they are reported one level lower and labelled.
+        const fixture = isFixture(input.file.displayPath);
+        const severity = fixture ? lower(input.severity ?? rule.severity) : (input.severity ?? rule.severity);
+        if (fixture) input = { ...input, message: `${input.message} (test fixture)` };
         if (severityRank(severity) < minRank) return;
         const file = input.file;
         if (pathFilters.some((re) => re.test(file.displayPath))) return;
@@ -163,6 +167,17 @@ function grade_(findings: Finding[]): { score: number; grade: ScanResult['grade'
   if (findings.some((f) => f.severity === 'critical')) return { score: Math.min(score, 39), grade: 'F' };
   const grade = score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : score >= 40 ? 'D' : 'F';
   return { score, grade };
+}
+
+const FIXTURE_DIR = /(^|\/)(tests?|__tests__|fixtures?|__fixtures__|testdata|test-data|spec|specs|evals?)\//i;
+
+function isFixture(displayPath: string): boolean {
+  return FIXTURE_DIR.test(displayPath);
+}
+
+function lower(s: Severity): Severity {
+  const order: Severity[] = ['info', 'low', 'medium', 'high', 'critical'];
+  return order[Math.max(0, order.indexOf(s) - 1)]!;
 }
 
 const IGNORE_RE = /bekci-ignore(?:-next-line)?(?:\s+([A-Z]{2}\d{3}(?:\s*,\s*[A-Z]{2}\d{3})*))?/;

@@ -40,8 +40,11 @@ export const SECRET_PATTERNS: Array<[RegExp, string]> = [
 const PLACEHOLDER =
   /x{4,}|X{4,}|\*{3,}|\.{3}|\u2026|<[^>]*>|\{\{|\$\{|your[_-]?|example|EXAMPLE|placeholder|changeme|dummy|sample|redacted|REDACTED|test[_-]?key|0{8,}|1234567/;
 
+const DUMMY_DB_URL =
+  /:\/\/[^:\s]+:(pass(word)?|postgres|mysql|root|admin|secret|test|user|pwd|changeme|example|1234)@|@(localhost|127\.0\.0\.1|db|postgres|mysql|redis|mongo)[:/]/i;
+
 function isPlaceholder(s: string): boolean {
-  return PLACEHOLDER.test(s);
+  return PLACEHOLDER.test(s) || (/^[a-z+]+:\/\//i.test(s) && DUMMY_DB_URL.test(s));
 }
 
 const INLINE_CREDENTIAL =

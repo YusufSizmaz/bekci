@@ -113,7 +113,8 @@ export const hiddenUnicode: Rule = {
         report({
           file,
           ...pos,
-          severity: splitsWord ? 'high' : 'medium',
+          // In code, zero-width characters are mostly BOM handling or test data; in prose they hide text.
+          severity: splitsWord ? 'high' : file.kind === 'script' ? 'low' : 'medium',
           message: `Invisible character U+${cp.toString(16).toUpperCase().padStart(4, '0')} ${splitsWord ? 'splits a word (filter evasion)' : 'hidden in text'}`,
         });
       }
@@ -123,7 +124,7 @@ export const hiddenUnicode: Rule = {
 
 /** Words around a quoted phrase that show it is being cited, not issued. */
 const CITATION_CONTEXT =
-  /\b(e\.g\.|i\.e\.|example|for instance|such as|like|says?|said|contains?|warn|beware|watch out|detect|flag|injection|attack|malicious|suspicious|phrases?|patterns?|refuse)\b/i;
+  /\b(?:e\.g\.|i\.e\.)|\b(?:example|for instance|such as|like|says?|said|contains?|warn|beware|watch out|detect|flag|injection|attack|malicious|suspicious|phrases?|patterns?|refuse|directives?)\b/i;
 
 interface PhraseHit {
   line: number;
@@ -173,7 +174,8 @@ const OVERRIDE_PATTERNS: RegExp[] = [
   /\b(ignore|disregard|forget|override|bypass|skip)\s+(all\s+|any\s+|the\s+|your\s+|of\s+)*(previous|prior|above|earlier|preceding|original|initial|system|safety|developer)\s+(instructions?|prompts?|rules|directives|guidelines|guardrails|constraints|messages?)\b/i,
   /\b(new|updated|real|actual|true)\s+system\s+(prompt|instructions?)\s*:/i,
   /<\|(im_start|im_end|system|endoftext)\|>|\[\/?INST\]|<<\/?SYS>>/i,
-  /\b(enter|enable|activate|switch\s+to)\s+(developer|god|dan|jailbreak|unrestricted)\s+mode\b/i,
+  // Not "developer mode": Discord, Android, Chrome and Windows all have a setting by that name.
+  /\b(enter|enable|activate|switch\s+to)\s+(god|dan|jailbreak|unrestricted)\s+mode\b/i,
   /\byou\s+are\s+now\s+(DAN|in\s+(developer|unrestricted|jailbreak)\s+mode|free\s+of\s+(all\s+)?(restrictions|rules))/i,
   /\b(these|this|following)\s+instructions?\s+(take|takes|have|has)\s+(priority|precedence)\s+over\s+(all\s+|any\s+)?(other|previous|system|user)\b/i,
   /\byour\s+(real|true|actual|hidden|secret)\s+(task|instructions?|goal|purpose|objective)\s+(is|are)\b/i,
@@ -199,11 +201,13 @@ export const instructionOverride: Rule = {
     for (const file of promptFiles(ctx)) {
       for (const h of phraseHits(file, OVERRIDE_PATTERNS)) {
         const cited = !h.obfuscated && isCited(file.content, h.index);
+        // Reference docs next to a skill are read on demand and often discuss attacks.
+        const softer = cited || (file.kind === 'reference' && !h.obfuscated);
         report({
           file,
           line: h.line,
           column: h.column,
-          severity: cited ? 'medium' : 'high',
+          severity: softer ? 'medium' : 'high',
           message:
             `Instruction-override phrasing: "${excerpt(h.phrase, 80)}"` +
             (h.obfuscated ? ' (obfuscated with invisible or look-alike characters)' : cited ? ' (cited as an example)' : ''),
@@ -216,8 +220,10 @@ export const instructionOverride: Rule = {
 const CONCEAL_PATTERNS: RegExp[] = [
   // "Don't tell the user about this" hides something; "don't tell the user they must adopt X" does not.
   /\b(do\s+not|don['\u2019]t|never)\s+(tell|inform|mention|reveal|disclose|show|notify|alert|report)\s+(this\s+|it\s+|anything\s+|any\s+of\s+this\s+)?(to\s+)?(the\s+)?(user|human|developer|operator)\b(?=\s*(about\b|that\s+(you|this|it|we)\b|what\s+you\b|you\b|anything\b|[.,;:!)]|$))/im,
-  // "...without the user's knowledge" unless the sentence already negates the action ("never ... without").
-  /(?<!\b(never|not|n['\u2019]t|no)\b[^.!?\n]{0,80})\bwithout\s+(the\s+)?(user|human|developer)(['\u2019]s)?\s+(knowledge|knowing|noticing|consent|being\s+aware)\b/i,
+  // "...without the user's knowledge" unless the sentence already negates it ("never ... without",
+  // "avoid ...", an anti-pattern list item). "Without consent" is left out: it almost always appears
+  // in rules that forbid something, while hidden actions are phrased as knowledge or awareness.
+  /(?<!(?:\b(?:never|not|n['\u2019]t|no|avoid|forbid(?:den)?|prohibit(?:ed)?|\u274C|\u2717|\u{1F6AB})\b|\u274C|\u2717)[^.!?\n]{0,200})\bwithout\s+(the\s+)?(user|human|developer)(['\u2019]s)?\s+(knowledge|knowing|noticing|being\s+aware)\b/iu,
   /\b(hide|conceal|keep)\s+(this|it|these|that|them|the\s+\w+)\s+(secret\s+|hidden\s+)?from\s+(the\s+)?(user|human|developer)\b/i,
   /\b(secretly|covertly|silently|quietly|discreetly|stealthily)\s+(send|upload|exfiltrate|post|transmit|copy|forward|run|execute|install|download|add|insert|modify|include|read|collect|log)\b/i,
   /\b(the\s+)?(user|human)\s+(must|should|will)\s+(not|never)\s+(know|see|notice|find\s+out|be\s+(told|informed|aware))\b/i,
@@ -239,11 +245,13 @@ export const concealment: Rule = {
     for (const file of promptFiles(ctx)) {
       for (const h of phraseHits(file, CONCEAL_PATTERNS)) {
         const cited = !h.obfuscated && isCited(file.content, h.index);
+        // Reference docs next to a skill are read on demand and often discuss attacks.
+        const softer = cited || (file.kind === 'reference' && !h.obfuscated);
         report({
           file,
           line: h.line,
           column: h.column,
-          severity: cited ? 'medium' : 'high',
+          severity: softer ? 'medium' : 'high',
           message:
             `Concealment instruction: "${excerpt(h.phrase, 80)}"` +
             (h.obfuscated ? ' (obfuscated with invisible or look-alike characters)' : cited ? ' (cited as an example)' : ''),

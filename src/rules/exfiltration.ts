@@ -109,6 +109,29 @@ const EXFIL_HOST_RE = new RegExp(
 const FILE_UPLOAD =
   /\bcurl\b[^\n]{0,300}(\s-d\s*['"]?@|--data(-binary|-raw|-urlencode)?[\s=]+['"]?@|\s-F\s*['"]?[\w-]+=@|--form\s+['"]?[\w-]+=@|\s(-T|--upload-file)\s+\S)|\bwget\b[^\n]{0,300}--post-file[\s=]/;
 
+/**
+ * Detection rules and deny lists name credential paths without touching them:
+ * `SECRET_HINTS = (".env", ".ssh", "id_rsa", ".aws")`, or a regex literal such as `r"\.ssh/"`.
+ */
+function isPatternList(unit: TextUnit, h: Hit): boolean {
+  if (unit.file.kind !== 'script' || unit.label) return false;
+  const start = unit.text.lastIndexOf('\n', h.index - 1) + 1;
+  const end = unit.text.indexOf('\n', h.index);
+  const line = unit.text.slice(start, end === -1 ? unit.text.length : end);
+  const literals = line.match(/(["'])(?:\\.|(?!\1).){0,80}\1/g) ?? [];
+  if (literals.length >= 4 && /,/.test(line)) return true;
+  return /\br["']|re\.compile|new RegExp|\\[sbdw.]/.test(line);
+}
+
+/** Pure capture services are high; chat webhooks and tunnels are legitimate integrations often enough to be medium. */
+const INTEGRATION_HOSTS = /(slack\.com|discord(app)?\.com|telegram\.org|ngrok|trycloudflare|loca\.lt|localtunnel|serveo)/i;
+
+function exfilSeverity(host: string, prose: boolean): 'high' | 'medium' | 'low' {
+  const base = INTEGRATION_HOSTS.test(host) ? 'medium' : 'high';
+  if (!prose) return base;
+  return base === 'high' ? 'medium' : 'low';
+}
+
 function isProse(unit: TextUnit): boolean {
   return MARKDOWN_KINDS.has(unit.file.kind) && !unit.label;
 }
@@ -171,6 +194,7 @@ export const exfiltrationEndpoint: Rule = {
           file: unit.file,
           line: h.line,
           column: h.column,
+          severity: exfilSeverity(h.match[1]!, isProse(unit)),
           message: where(unit, `Sends data to capture/tunnel service \`${h.match[1]}\``),
           evidence: h.evidence,
         });
@@ -223,8 +247,11 @@ export const exfiltrationChain: Rule = {
         for (const { re, what, weak } of patterns) {
           if (secret && !secret.weak) break;
           if (secret && weak) break;
-          const first = hits(unit, re).next();
-          if (!first.done) secret = { unit, hit: first.value, what, weak };
+          for (const h of hits(unit, re)) {
+            if (isPatternList(unit, h)) continue;
+            secret = { unit, hit: h, what, weak };
+            break;
+          }
         }
         if (!send) {
           // In prose, only correlate statements that are close together (same snippet), not a
@@ -245,7 +272,9 @@ export const exfiltrationChain: Rule = {
         file: secret.unit.file,
         line: secret.hit.line,
         column: secret.hit.column,
-        severity: secret.weak ? 'medium' : 'critical',
+        // In executable code this is the stealer pattern. In prose it is usually a setup guide, a
+        // threat model or offensive-security training material: worth a look, not an alarm.
+        severity: secret.weak || isProse(secret.unit) ? 'medium' : 'critical',
         message: where(
           secret.unit,
           `Reads ${secret.what} and sends data over the network (\`${excerpt(send.hit.match[0].trim(), 30)}\` at ${sendWhere})`,

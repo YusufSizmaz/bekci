@@ -32,7 +32,8 @@ export function executableUnits(ctx: ScanContext): TextUnit[] {
     units.push({ file, text: file.content, group: file.path });
   }
   for (const s of ctx.servers) {
-    const text = [s.commandLine, ...Object.values(s.env), s.url ?? ''].join(' ');
+    // One value per line, so a pattern never runs from the command line into an env value.
+    const text = [s.commandLine, ...Object.values(s.env), s.url ?? ''].join('\n');
     units.push({ file: s.file, text, fixedLine: s.line, label: `MCP server "${s.name}"`, group: `${s.file.path}#mcp:${s.name}` });
   }
   for (const h of ctx.hooks) {
