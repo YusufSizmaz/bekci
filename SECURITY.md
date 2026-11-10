@@ -27,8 +27,12 @@ The threat model and the defences that exist today are documented in [docs/archi
 
 ## Supported versions
 
-Only the latest minor release receives fixes. Releases are published from CI with [npm provenance](https://docs.npmjs.com/generating-provenance-statements), so you can verify that a package was built from this repository:
+Only the latest minor release receives fixes.
+
+From 0.1.1 on, releases are published from the tagged commit by the `Release` workflow using npm [trusted publishing](https://docs.npmjs.com/trusted-publishers): no npm token is stored anywhere, every package carries a [provenance attestation](https://docs.npmjs.com/generating-provenance-statements) linking it to this repository, and each version is staged until a maintainer approves it with 2FA. Verify an installed copy with:
 
 ```bash
 npm audit signatures
 ```
+
+0.1.0, the first release, was published manually by the maintainer and has no provenance attestation.

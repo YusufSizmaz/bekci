@@ -6,7 +6,7 @@ on:
 
 permissions:
   contents: write
-  id-token: write # npm provenance and trusted publishing
+  id-token: write # trusted publishing (OIDC) and provenance
 
 jobs:
   release:
@@ -25,18 +25,20 @@ jobs:
       - name: Check tag matches package.json
         run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
 
-      - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Trusted publishing (OIDC): no npm token is stored in this repository. The trusted
+      # publisher is configured on npmjs.com for YusufSizmaz/bekci + release.yml, and
+      # provenance is attached automatically. npm stages the version; a maintainer approves
+      # it with 2FA (npm stage approve / npmjs.com) before it becomes installable.
+      - name: Publish to npm (staged)
         run: |
           version="$(node -p 'require("./package.json").version')"
           if npm view "bekci@$version" version >/dev/null 2>&1; then
             echo "bekci@$version is already on npm; skipping publish."
             exit 0
           fi
-          npm publish --provenance --access public
-          # The registry stages new versions until a maintainer approves them with 2FA.
-          echo "::notice title=Approve the release::Approve bekci@$version on npmjs.com (Staged Packages) or with 'npm stage approve' before it becomes installable."
+          npm install --global npm@11.21.2
+          npm stage publish --access public
+          echo "::notice title=Approve bekci@$version::npm staged the release. Approve it on npmjs.com or run: npx npm@latest stage list bekci && npx npm@latest stage approve <stage-id>"
 
       - name: GitHub release
         env:

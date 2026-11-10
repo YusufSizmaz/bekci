@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Releases are published by CI through npm trusted publishing (no stored token, automatic provenance) and npm staged publishing (each version is approved by a maintainer with 2FA). Re-running the release for a version already on npm is a no-op.
+
 ## [0.1.0] - 2026-11-10
 
 First public release.
@@ -28,4 +34,5 @@ bekci treats every scanned file as hostile input:
 - Remote clones run with the user's git config, hooks, filters and symlinks disabled.
 - All source files are ASCII-only, enforced in CI.
 
+[Unreleased]: https://github.com/YusufSizmaz/bekci/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/YusufSizmaz/bekci/releases/tag/v0.1.0

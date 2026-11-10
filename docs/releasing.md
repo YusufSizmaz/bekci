@@ -31,13 +31,24 @@ In **Settings**:
 
 ### npm
 
-1. The first publish is manual, from a clean checkout of the tagged commit (the account needs 2FA enabled):
+1. The first version of a new package has to be published by hand, from a clean checkout of the tagged commit (the account needs 2FA):
    ```bash
    npm login
    npm publish --access public --otp=<code>
    ```
-   Then approve the staged version (see step 5 under Releasing).
-2. For automated releases, create a **granular access token** on npmjs.com with read/write access to `bekci` only, and add it as the repository secret `NPM_TOKEN`. Prefer [trusted publishing](https://docs.npmjs.com/trusted-publishers) once it is configured for the package; then the token is no longer needed.
+   npm stages it; approve it (step 5 under Releasing). Done for 0.1.0.
+2. Configure **trusted publishing** so CI can publish without any token: npmjs.com → package `bekci` → **Settings** → **Trusted Publisher** → GitHub Actions, with
+   - Organization or user: `YusufSizmaz`
+   - Repository: `bekci`
+   - Workflow filename: `release.yml`
+   - Environment: leave empty; allowed actions: leave the defaults (staged publishing is always allowed).
+
+   Fields are case-sensitive and npm does not validate them when you save, so check them twice. Do **not** create an automation token that bypasses 2FA: npm is phasing those out.
+3. Optional: remove the `0.0.0-stage` placeholder npm created for the first staged publish, so the package shows a single version:
+   ```bash
+   npm unpublish bekci@0.0.0-stage --otp=<code>
+   # if npm refuses: npm deprecate bekci@0.0.0-stage "Staging placeholder; use bekci@latest" --otp=<code>
+   ```
 
 ## Releasing
 
@@ -48,13 +59,13 @@ In **Settings**:
    npm version patch   # or minor / major; creates the commit and the vX.Y.Z tag
    git push --follow-tags
    ```
-4. The `Release` workflow runs typecheck and tests, checks that the tag matches `package.json`, publishes to npm with provenance (skipped if the version is already on npm) and creates the GitHub release with this version's CHANGELOG section as notes.
+4. The `Release` workflow runs typecheck and tests, checks that the tag matches `package.json`, stages the package on npm through trusted publishing with provenance (skipped if the version is already on npm) and creates the GitHub release with this version's CHANGELOG section as notes.
 5. **Approve the staged version.** npm holds new versions in a staging queue until a maintainer approves them with 2FA; until then only a `0.0.0-stage` placeholder is visible for a new package. Approve on npmjs.com (Staged Packages) or from the CLI (npm 11.15+ / Node 22.14+):
    ```bash
    npx npm@latest stage list bekci
    npx npm@latest stage approve <stage-id>
    ```
-   Trusted-publishing (OIDC) credentials can publish but cannot approve; approval is deliberately a human step.
+   Trusted-publishing (OIDC) credentials can stage but cannot approve; approval is deliberately a human step.
 6. The first time, publish the action to the **GitHub Marketplace** from the release page ("Publish this Action to the GitHub Marketplace").
 7. Move the floating major tag for Action users who pin `@v0`:
    ```bash
