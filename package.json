@@ -59,7 +59,8 @@
     "selfscan": "node dist/cli.js . --no-user",
     "prepublishOnly": "npm run typecheck && npm test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "version": "node scripts/bump-docs.mjs && git add README.md README.tr.md CHANGELOG.md .github/ISSUE_TEMPLATE assets/demo.svg"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

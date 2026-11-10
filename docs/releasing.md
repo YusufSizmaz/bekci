@@ -52,11 +52,14 @@ In **Settings**:
 
 ## Releasing
 
-1. Update `CHANGELOG.md` (move items from "Unreleased" under the new version).
-2. Update the pinned version in the README and `README.tr.md` examples (`YusufSizmaz/bekci@vX.Y.Z`, `npx bekci@X.Y.Z`).
-3. Bump and tag:
+1. Make sure everything for the release is listed under `## [Unreleased]` in `CHANGELOG.md`.
+2. Bump, commit and tag in one step:
    ```bash
-   npm version patch   # or minor / major; creates the commit and the vX.Y.Z tag
+   npm version patch -m "chore(release): %s"   # or minor / major
+   ```
+   The `version` script (`scripts/bump-docs.mjs`) turns "Unreleased" into the new version with a date and compare links, updates the pinned versions in both READMEs (`YusufSizmaz/bekci@vX.Y.Z`, `npx bekci@X.Y.Z`) and the issue templates, and re-renders `assets/demo.svg`, all inside the release commit.
+3. Push the commit and the tag:
+   ```bash
    git push --follow-tags
    ```
 4. The `Release` workflow runs typecheck and tests, checks that the tag matches `package.json`, stages the package on npm through trusted publishing with provenance (skipped if the version is already on npm) and creates the GitHub release with this version's CHANGELOG section as notes.
