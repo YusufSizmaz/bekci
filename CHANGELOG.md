@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-10
+
 ### Added
 
 - [Research report](docs/research/2026-11-popular-agent-repos.md): what bekci finds in the 80 most-starred skill, plugin and MCP repositories.
@@ -68,7 +70,8 @@ bekci treats every scanned file as hostile input:
 - Remote clones run with the user's git config, hooks, filters and symlinks disabled.
 - All source files are ASCII-only, enforced in CI.
 
-[Unreleased]: https://github.com/YusufSizmaz/bekci/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/YusufSizmaz/bekci/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/YusufSizmaz/bekci/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/YusufSizmaz/bekci/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/YusufSizmaz/bekci/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/YusufSizmaz/bekci/releases/tag/v0.1.0

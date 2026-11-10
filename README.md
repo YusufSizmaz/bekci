@@ -105,7 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: YusufSizmaz/bekci@v0.1.2
+      - uses: YusufSizmaz/bekci@v0.1.3
         with:
           fail-on: high # critical | high | medium | low | none
 ```
@@ -123,7 +123,7 @@ Outputs: `grade`, `score`, `findings`. The action writes a summary table to the 
 Anywhere else:
 
 ```bash
-npx bekci@0.1.2 . --no-user -o bekci.sarif -o bekci.json -o bekci.md
+npx bekci@0.1.3 . --no-user -o bekci.sarif -o bekci.json -o bekci.md
 ```
 
 `-o` is repeatable and picks the format from the extension, so one scan writes every report while the terminal shows the summary.
