@@ -225,7 +225,10 @@ const CONCEAL_PATTERNS: RegExp[] = [
   // in rules that forbid something, while hidden actions are phrased as knowledge or awareness.
   /(?<!(?:\b(?:never|not|n['\u2019]t|no|avoid|forbid(?:den)?|prohibit(?:ed)?|\u274C|\u2717|\u{1F6AB})\b|\u274C|\u2717)[^.!?\n]{0,200})\bwithout\s+(the\s+)?(user|human|developer)(['\u2019]s)?\s+(knowledge|knowing|noticing|being\s+aware)\b/iu,
   /\b(hide|conceal|keep)\s+(this|it|these|that|them|the\s+\w+)\s+(secret\s+|hidden\s+)?from\s+(the\s+)?(user|human|developer)\b/i,
-  /\b(secretly|covertly|silently|quietly|discreetly|stealthily)\s+(send|upload|exfiltrate|post|transmit|copy|forward|run|execute|install|download|add|insert|modify|include|read|collect|log)\b/i,
+  // "Secretly <anything>" hides an action. "Silently install/run" usually means "without verbose
+  // output", so silently/quietly only count when data leaves the machine.
+  /\b(secretly|covertly|discreetly|stealthily)\s+(send|upload|exfiltrate|post|transmit|copy|forward|run|execute|install|download|add|insert|modify|include|read|collect|log)\b/i,
+  /\b(silently|quietly)\s+(send|upload|exfiltrate|post|transmit|forward|collect|report\s+back|phone\s+home)\b/i,
   /\b(the\s+)?(user|human)\s+(must|should|will)\s+(not|never)\s+(know|see|notice|find\s+out|be\s+(told|informed|aware))\b/i,
 ];
 

@@ -41,7 +41,7 @@ const PLACEHOLDER =
   /x{4,}|X{4,}|\*{3,}|\.{3}|\u2026|<[^>]*>|\{\{|\$\{|your[_-]?|example|EXAMPLE|placeholder|changeme|dummy|sample|redacted|REDACTED|test[_-]?key|0{8,}|1234567/;
 
 const DUMMY_DB_URL =
-  /:\/\/[^:\s]+:(pass(word)?|postgres|mysql|root|admin|secret|test|user|pwd|changeme|example|1234)@|@(localhost|127\.0\.0\.1|db|postgres|mysql|redis|mongo)[:/]/i;
+  /:\/\/[^:\s]+:[^@\s]*(pass|secret|pwd|changeme|example|test|1234)[^@\s]*@|:\/\/[^:\s]+:(postgres|mysql|root|admin|user)@|@(localhost|127\.0\.0\.1|db|postgres|mysql|redis|mongo|host|hostname|server|your[-_]?host)[:/]/i;
 
 function isPlaceholder(s: string): boolean {
   return PLACEHOLDER.test(s) || (/^[a-z+]+:\/\//i.test(s) && DUMMY_DB_URL.test(s));

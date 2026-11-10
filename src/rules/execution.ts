@@ -156,6 +156,15 @@ const DESTRUCTIVE: Array<[RegExp, string, Severity, boolean?]> = [
   [/\b(DROP\s+(DATABASE|SCHEMA)|TRUNCATE\s+TABLE)\b/, 'drops or truncates database objects', 'medium', true],
 ];
 
+const DENY_CONTEXT =
+  /\b(block(ed|list)?|deny|denied|deny_?list|forbid(den)?|blacklist|disallow(ed)?|prohibit(ed)?|dangerous|unsafe|never\s+run|do\s+not\s+run)\b/i;
+
+function lineAround(text: string, index: number): string {
+  const start = text.lastIndexOf('\n', index - 1) + 1;
+  const end = text.indexOf('\n', index);
+  return text.slice(start, end === -1 ? text.length : end);
+}
+
 export const destructiveCommand: Rule = {
   id: 'BK007',
   name: 'destructive-command',
@@ -178,6 +187,8 @@ export const destructiveCommand: Rule = {
         if (executableOnly && docs) continue;
         for (const h of hits(unit, re)) {
           if (lines.has(h.line)) continue;
+          // Deny lists and guards name the commands they block: BLOCKED_COMMANDS="rm -rf /,mkfs,..."
+          if (DENY_CONTEXT.test(lineAround(unit.text, h.index))) continue;
           lines.add(h.line);
           report({
             file: unit.file,
