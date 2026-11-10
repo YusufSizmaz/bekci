@@ -56,6 +56,8 @@ export const remoteCodeExecution: Rule = {
       for (const re of RCE_PATTERNS) {
         for (const h of hits(unit, re)) {
           if (lines.has(h.line)) continue;
+          // `curl ... | sh` or `curl <URL> | sh` is a sentence about the pattern, not a command.
+          if (/^(curl|wget)\s+(\.\.\.|\u2026|<[^>]*>)\s*\\?\|/i.test(h.match[0])) continue;
           lines.add(h.line);
           report({
             file: unit.file,
@@ -156,8 +158,9 @@ const DESTRUCTIVE: Array<[RegExp, string, Severity, boolean?]> = [
   [/\b(DROP\s+(DATABASE|SCHEMA)|TRUNCATE\s+TABLE)\b/, 'drops or truncates database objects', 'medium', true],
 ];
 
+// Letter boundaries rather than \b, so BLOCKED_COMMANDS and deny_list still match.
 const DENY_CONTEXT =
-  /\b(block(ed|list)?|deny|denied|deny_?list|forbid(den)?|blacklist|disallow(ed)?|prohibit(ed)?|dangerous|unsafe|never\s+run|do\s+not\s+run)\b/i;
+  /(?<![a-z])(block(ed|list)?|deny|denied|deny_?list|forbid(den)?|blacklist|disallow(ed)?|prohibit(ed)?|dangerous|unsafe|never\s+run|do\s+not\s+run)(?![a-z])/i;
 
 function lineAround(text: string, index: number): string {
   const start = text.lastIndexOf('\n', index - 1) + 1;

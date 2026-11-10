@@ -1,4 +1,5 @@
 import type { Rule, SourceFile } from '../types.js';
+import { MARKDOWN_KINDS } from '../types.js';
 import { lineOf, positionAt, redact } from '../util/text.js';
 
 export const SECRET_PATTERNS: Array<[RegExp, string]> = [
@@ -44,6 +45,9 @@ const DUMMY_DB_URL =
   /:\/\/[^:\s]+:[^@\s]*(pass|secret|pwd|changeme|example|test|1234)[^@\s]*@|:\/\/[^:\s]+:(postgres|mysql|root|admin|user)@|@(localhost|127\.0\.0\.1|db|postgres|mysql|redis|mongo|host|hostname|server|your[-_]?host)[:/]/i;
 
 function isPlaceholder(s: string): boolean {
+  // A token whose body is one repeated character (ghp_aaaa...) is test data. Only the whole body
+  // counts: real private keys contain long runs such as AAAAAAAA.
+  if (/^(.)\1{7,}$/.test(s.replace(/^[A-Za-z]+[_-]/, ''))) return true;
   return PLACEHOLDER.test(s) || (/^[a-z+]+:\/\//i.test(s) && DUMMY_DB_URL.test(s));
 }
 
@@ -89,7 +93,14 @@ export const hardcodedSecret: Rule = {
         for (const m of text.matchAll(re)) {
           if (isPlaceholder(m[0])) continue;
           const pos = fixedLine ? { line: fixedLine, column: 1 } : positionAt(text, m.index!);
-          report({ file, ...pos, message: `${what} in plain text: ${redact(m[0])}` });
+          // Database URLs in prose are nearly always examples; recognised token formats are not.
+          const exampleUrl = what === 'database URL with password' && MARKDOWN_KINDS.has(file.kind);
+          report({
+            file,
+            ...pos,
+            severity: exampleUrl ? 'medium' : undefined,
+            message: `${what} in plain text: ${redact(m[0])}`,
+          });
         }
       }
     };

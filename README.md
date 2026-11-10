@@ -38,6 +38,8 @@ That extension layer is now an attack surface:
 
 bekci reads all of it in about a second, with no network access and no API keys, and tells you what to fix.
 
+> **Research:** [What's inside the 80 most-starred agent skill, plugin and MCP repositories](docs/research/2026-11-popular-agent-repos.md). No malware, but 254 skills that pre-approve unrestricted shell access and 19 files that tell the agent to pipe a remote installer into `bash`.
+
 ## Quick start
 
 ```bash

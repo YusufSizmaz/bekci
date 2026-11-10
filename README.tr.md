@@ -37,6 +37,8 @@ Bu katman artık bir saldırı yüzeyi:
 
 bekci bunların hepsini ağa çıkmadan ve API anahtarı gerektirmeden yaklaşık bir saniyede okur ve neyi düzeltmeniz gerektiğini söyler.
 
+> **Araştırma:** [En çok yıldız alan 80 agent skill, plugin ve MCP reposunda neler var?](docs/research/2026-11-popular-agent-repos.md) (İngilizce). Zararlı yazılım yok, ama 254 skill sınırsız shell erişimini önceden onaylıyor ve 19 dosya ajana uzak bir kurulum script'ini `bash`'e aktarmasını söylüyor.
+
 ## Hızlı başlangıç
 
 ```bash

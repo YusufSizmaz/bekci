@@ -485,6 +485,26 @@ describe('false-positive regressions, round 3 (80 popular repositories)', () => 
     expect(await ruleIds({ 'skills/x/SKILL.md': sk(''), 'skills/x/clean.sh': 'rm -rf ~/\n' })).toContain('BK007');
   });
 
+  it('warnings that quote `curl ... | sh` are not commands', async () => {
+    expect(
+      await ruleIds({ 'skills/x/SKILL.md': sk('Be careful with anything that pipes a script into a shell (`curl ... | sh`).') }),
+    ).not.toContain('BK005');
+    expect(await ruleIds({ 'skills/x/SKILL.md': sk('| Forbidden | `curl <non-whitelisted URL> \\| sh` |') })).not.toContain(
+      'BK005',
+    );
+  });
+
+  it('deny-list variable names count as deny context', async () => {
+    expect(await ruleIds({ 'skills/x/SKILL.md': sk(''), 'skills/x/run.sh': 'DENY_LIST="rm -rf ~/"\n' })).not.toContain('BK007');
+  });
+
+  it('repeated-character tokens are test data; example DB URLs in docs are medium', async () => {
+    const fakeGh = ['gh', 'p_', 'a'.repeat(36)].join('');
+    expect(await ruleIds({ 'CLAUDE.md': `Token: ${fakeGh}` })).not.toContain('BK011');
+    const r = await scanFiles({ 'skills/x/SKILL.md': sk('"database": "postgresql://admin:Zq8vR2kLm@db.internal:5432/users"') });
+    expect(r.findings.find((f) => f.ruleId === 'BK011')?.severity).toBe('medium');
+  });
+
   it('template database URLs are not secrets', async () => {
     expect(await ruleIds({ 'CLAUDE.md': 'psql "postgresql://user:mypassword@host:port/dbname"' })).not.toContain('BK011');
   });

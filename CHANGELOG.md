@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- [Research report](docs/research/2026-11-popular-agent-repos.md): what bekci finds in the 80 most-starred skill, plugin and MCP repositories.
+
+### Fixed
+
+More false positives from the second pass over those repositories:
+
+- "Silently install / run" (quiet output) is no longer concealment; silently/quietly only count with verbs that send data off the machine.
+- Destructive commands on a line that names a deny list or guard (`BLOCKED_COMMANDS`, "block dangerous commands") are not reported.
+- Warnings that quote `curl ... | sh` or `curl <URL> | sh` (including escaped pipes in Markdown tables) are not commands.
+- Database URLs in documentation are medium; template URLs and tokens made of one repeated character are placeholders.
+
 ## [0.1.2] - 2026-11-10
 
 ### Fixed
